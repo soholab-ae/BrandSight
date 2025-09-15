@@ -1,9 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Download, Filter } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Download, Filter, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import VendorDetailModal from "@/components/VendorDetailModal";
 
@@ -26,6 +29,13 @@ export default function VendorComparisonTable() {
   const [selectedVendor, setSelectedVendor] = useState<VendorMetrics | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
+  // Filtering and sorting states
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortField, setSortField] = useState<keyof VendorMetrics>("revenue");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [revenueFilter, setRevenueFilter] = useState<string>("all");
+  const [growthFilter, setGrowthFilter] = useState<string>("all");
+
   const handleVendorClick = (vendor: VendorMetrics) => {
     setSelectedVendor(vendor);
     setIsModalOpen(true);
@@ -34,6 +44,20 @@ export default function VendorComparisonTable() {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setSelectedVendor(null);
+  };
+
+  const handleSort = (field: keyof VendorMetrics) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDirection("desc");
+    }
+  };
+
+  const getSortIcon = (field: keyof VendorMetrics) => {
+    if (sortField !== field) return <ArrowUpDown className="w-4 h-4 text-gray-400" />;
+    return sortDirection === "asc" ? <ArrowUp className="w-4 h-4 text-blue-600" /> : <ArrowDown className="w-4 h-4 text-blue-600" />;
   };
 
   if (isLoading) {
@@ -110,6 +134,62 @@ export default function VendorComparisonTable() {
     },
   ];
 
+  // Filter and sort vendors
+  const filteredAndSortedVendors = useMemo(() => {
+    let filtered = mockVendors;
+
+    // Apply search filter
+    if (searchTerm) {
+      filtered = filtered.filter(vendor =>
+        vendor.name.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Apply revenue filter
+    if (revenueFilter !== "all") {
+      switch (revenueFilter) {
+        case "high":
+          filtered = filtered.filter(vendor => vendor.revenue >= 30000);
+          break;
+        case "medium":
+          filtered = filtered.filter(vendor => vendor.revenue >= 15000 && vendor.revenue < 30000);
+          break;
+        case "low":
+          filtered = filtered.filter(vendor => vendor.revenue < 15000);
+          break;
+      }
+    }
+
+    // Apply growth filter
+    if (growthFilter !== "all") {
+      switch (growthFilter) {
+        case "growing":
+          filtered = filtered.filter(vendor => vendor.growth > 0);
+          break;
+        case "declining":
+          filtered = filtered.filter(vendor => vendor.growth <= 0);
+          break;
+      }
+    }
+
+    // Apply sorting
+    filtered.sort((a, b) => {
+      const aValue = a[sortField];
+      const bValue = b[sortField];
+      
+      let comparison = 0;
+      if (typeof aValue === "string" && typeof bValue === "string") {
+        comparison = aValue.localeCompare(bValue);
+      } else {
+        comparison = (aValue as number) - (bValue as number);
+      }
+      
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+
+    return filtered;
+  }, [searchTerm, revenueFilter, growthFilter, sortField, sortDirection]);
+
   const vendorColors: Record<string, string> = {
     Nike: "from-red-500 to-red-600",
     Adidas: "from-blue-500 to-blue-600",
@@ -120,7 +200,7 @@ export default function VendorComparisonTable() {
   return (
     <Card className="shadow-sm border border-gray-200 p-6 mb-8">
       <CardHeader className="px-0 pb-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-4">
           <CardTitle className="text-lg font-semibold text-gray-900">
             Vendor Performance Comparison
           </CardTitle>
@@ -134,15 +214,113 @@ export default function VendorComparisonTable() {
               <Download size={16} className="mr-1" />
               Export
             </Button>
-            <Button 
-              size="sm"
-              className="bg-shopify-600 hover:bg-shopify-700"
-              data-testid="button-filter-vendors"
-            >
-              <Filter size={16} className="mr-1" />
-              Filter
-            </Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button 
+                  size="sm"
+                  variant="outline"
+                  className="text-gray-700 hover:bg-gray-50"
+                  data-testid="button-filter-vendors"
+                >
+                  <Filter size={16} className="mr-1" />
+                  Filter
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 p-4">
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 mb-2 block">Revenue Range</label>
+                    <Select value={revenueFilter} onValueChange={setRevenueFilter}>
+                      <SelectTrigger data-testid="select-revenue-filter">
+                        <SelectValue placeholder="All revenue ranges" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All revenue ranges</SelectItem>
+                        <SelectItem value="high">High ($30k+)</SelectItem>
+                        <SelectItem value="medium">Medium ($15k-$30k)</SelectItem>
+                        <SelectItem value="low">Low (&lt;$15k)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 mb-2 block">Growth Status</label>
+                    <Select value={growthFilter} onValueChange={setGrowthFilter}>
+                      <SelectTrigger data-testid="select-growth-filter">
+                        <SelectValue placeholder="All vendors" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All vendors</SelectItem>
+                        <SelectItem value="growing">Growing vendors</SelectItem>
+                        <SelectItem value="declining">Declining vendors</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
+        </div>
+
+        {/* Search Bar */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <Input
+            placeholder="Search vendors..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+            data-testid="input-search-vendors"
+          />
+        </div>
+
+        {/* Active Filters Display */}
+        {(searchTerm || revenueFilter !== "all" || growthFilter !== "all") && (
+          <div className="flex items-center gap-2 mt-3">
+            <span className="text-sm text-gray-600">Active filters:</span>
+            {searchTerm && (
+              <Badge variant="secondary" className="gap-1">
+                Search: "{searchTerm}"
+                <button 
+                  onClick={() => setSearchTerm("")}
+                  className="ml-1 text-gray-500 hover:text-gray-700"
+                  data-testid="clear-search-filter"
+                >
+                  ×
+                </button>
+              </Badge>
+            )}
+            {revenueFilter !== "all" && (
+              <Badge variant="secondary" className="gap-1">
+                Revenue: {revenueFilter}
+                <button 
+                  onClick={() => setRevenueFilter("all")}
+                  className="ml-1 text-gray-500 hover:text-gray-700"
+                  data-testid="clear-revenue-filter"
+                >
+                  ×
+                </button>
+              </Badge>
+            )}
+            {growthFilter !== "all" && (
+              <Badge variant="secondary" className="gap-1">
+                Growth: {growthFilter}
+                <button 
+                  onClick={() => setGrowthFilter("all")}
+                  className="ml-1 text-gray-500 hover:text-gray-700"
+                  data-testid="clear-growth-filter"
+                >
+                  ×
+                </button>
+              </Badge>
+            )}
+          </div>
+        )}
+
+        {/* Results Count */}
+        <div className="mt-3">
+          <span className="text-sm text-gray-600" data-testid="vendor-count">
+            Showing {filteredAndSortedVendors.length} of {mockVendors.length} vendors
+          </span>
         </div>
       </CardHeader>
       
@@ -151,28 +329,70 @@ export default function VendorComparisonTable() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Vendor
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                  onClick={() => handleSort("name")}
+                  data-testid="header-vendor-name"
+                >
+                  <div className="flex items-center justify-between">
+                    Vendor
+                    {getSortIcon("name")}
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Revenue
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                  onClick={() => handleSort("revenue")}
+                  data-testid="header-revenue"
+                >
+                  <div className="flex items-center justify-between">
+                    Revenue
+                    {getSortIcon("revenue")}
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  AOV
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                  onClick={() => handleSort("aov")}
+                  data-testid="header-aov"
+                >
+                  <div className="flex items-center justify-between">
+                    AOV
+                    {getSortIcon("aov")}
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Conversion
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                  onClick={() => handleSort("conversion")}
+                  data-testid="header-conversion"
+                >
+                  <div className="flex items-center justify-between">
+                    Conversion
+                    {getSortIcon("conversion")}
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Visitors
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                  onClick={() => handleSort("visitors")}
+                  data-testid="header-visitors"
+                >
+                  <div className="flex items-center justify-between">
+                    Visitors
+                    {getSortIcon("visitors")}
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Growth
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                  onClick={() => handleSort("growth")}
+                  data-testid="header-growth"
+                >
+                  <div className="flex items-center justify-between">
+                    Growth
+                    {getSortIcon("growth")}
+                  </div>
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {mockVendors.map((vendor) => (
+              {filteredAndSortedVendors.map((vendor) => (
                 <tr 
                   key={vendor.id} 
                   className="hover:bg-gray-50 cursor-pointer transition-colors duration-200" 
