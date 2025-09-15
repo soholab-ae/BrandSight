@@ -107,7 +107,6 @@ export class ShopifyService {
             price: shopifyProduct.variants[0]?.price || '0',
             compareAtPrice: shopifyProduct.variants[0]?.compare_at_price,
             status: shopifyProduct.status,
-            updatedAt: new Date(shopifyProduct.updated_at),
           };
 
           await storage.createProduct(product);
