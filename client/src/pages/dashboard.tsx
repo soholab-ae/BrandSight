@@ -138,7 +138,7 @@ export default function Dashboard() {
 
           {/* Interactive Performance Chart */}
           <div className="mb-8">
-            <VendorPerformanceChart />
+            <VendorPerformanceChart dateRange={dateRange} />
           </div>
 
           {/* Top Products Card */}

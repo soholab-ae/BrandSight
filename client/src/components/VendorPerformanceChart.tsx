@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { DateRange } from "react-day-picker";
 import { 
   LineChart, 
   Line, 
@@ -27,7 +28,11 @@ interface VendorPerformanceData {
 
 type MetricType = 'revenue' | 'aov' | 'conversion';
 
-export default function VendorPerformanceChart() {
+interface VendorPerformanceChartProps {
+  dateRange?: DateRange;
+}
+
+export default function VendorPerformanceChart({ dateRange }: VendorPerformanceChartProps) {
   const [selectedMetric, setSelectedMetric] = useState<MetricType>('revenue');
   const [chartType, setChartType] = useState<'line' | 'area'>('area');
 
@@ -77,8 +82,18 @@ export default function VendorPerformanceChart() {
     underArmour: '#6b7280' // gray
   };
 
+  // Filter data based on date range
+  const filteredData = useMemo(() => {
+    if (!dateRange?.from || !dateRange?.to) return performanceData;
+    
+    return performanceData.filter(item => {
+      const itemDate = new Date(item.date);
+      return itemDate >= dateRange.from! && itemDate <= dateRange.to!;
+    });
+  }, [dateRange]);
+
   const formatChartData = () => {
-    return performanceData.map(item => ({
+    return filteredData.map(item => ({
       date: new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
       Nike: item.nike[selectedMetric],
       Adidas: item.adidas[selectedMetric],
@@ -323,13 +338,30 @@ export default function VendorPerformanceChart() {
         {/* Quick Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-200">
           {['Nike', 'Adidas', 'Puma', 'Under Armour'].map((vendor) => {
-            const latestData = performanceData[performanceData.length - 1];
-            const previousData = performanceData[performanceData.length - 2];
+            if (filteredData.length < 2) {
+              return (
+                <div key={vendor} className="text-center">
+                  <p className="text-sm font-medium text-gray-900">{vendor}</p>
+                  <p className="text-lg font-bold text-gray-700">
+                    {formatTooltipValue((filteredData[0]?.[vendor.toLowerCase().replace(' ', '') as keyof Omit<VendorPerformanceData, 'date'>] as any)?.[selectedMetric] || 0)}
+                  </p>
+                  <Badge variant="secondary">No comparison</Badge>
+                </div>
+              );
+            }
+
+            const latestData = filteredData[filteredData.length - 1];
+            const previousData = filteredData[filteredData.length - 2];
             
             const vendorKey = vendor.toLowerCase().replace(' ', '') as keyof Omit<VendorPerformanceData, 'date'>;
             const currentValue = (latestData[vendorKey] as any)[selectedMetric];
             const previousValue = (previousData[vendorKey] as any)[selectedMetric];
-            const change = ((currentValue - previousValue) / previousValue) * 100;
+            
+            // Handle divide by zero and null values
+            let change = 0;
+            if (previousValue && previousValue !== 0) {
+              change = ((currentValue - previousValue) / previousValue) * 100;
+            }
             
             return (
               <div key={vendor} className="text-center">
