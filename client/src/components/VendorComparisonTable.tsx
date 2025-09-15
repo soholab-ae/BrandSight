@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Download, Filter } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import VendorDetailModal from "@/components/VendorDetailModal";
 
 interface VendorMetrics {
   id: string;
@@ -20,6 +22,19 @@ export default function VendorComparisonTable() {
   const { data: vendors, isLoading } = useQuery<VendorMetrics[]>({
     queryKey: ["/api/stores/current/vendors"],
   });
+
+  const [selectedVendor, setSelectedVendor] = useState<VendorMetrics | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const handleVendorClick = (vendor: VendorMetrics) => {
+    setSelectedVendor(vendor);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedVendor(null);
+  };
 
   if (isLoading) {
     return (
@@ -158,18 +173,23 @@ export default function VendorComparisonTable() {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {mockVendors.map((vendor) => (
-                <tr key={vendor.id} className="hover:bg-gray-50" data-testid={`row-vendor-${vendor.id}`}>
+                <tr 
+                  key={vendor.id} 
+                  className="hover:bg-gray-50 cursor-pointer transition-colors duration-200" 
+                  data-testid={`row-vendor-${vendor.id}`}
+                  onClick={() => handleVendorClick(vendor)}
+                >
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className={`w-8 h-8 bg-gradient-to-br ${vendorColors[vendor.name]} rounded-lg flex items-center justify-center text-white font-bold text-sm`}>
                         {vendor.name[0]}
                       </div>
                       <div className="ml-3">
-                        <div className="text-sm font-medium text-gray-900" data-testid={`text-vendor-name-${vendor.id}`}>
+                        <div className="text-sm font-medium text-gray-900 hover:text-shopify-600 transition-colors" data-testid={`text-vendor-name-${vendor.id}`}>
                           {vendor.name}
                         </div>
                         <div className="text-sm text-gray-500" data-testid={`text-product-count-${vendor.id}`}>
-                          {vendor.productCount} products
+                          {vendor.productCount} products • Click for details
                         </div>
                       </div>
                     </div>
@@ -201,6 +221,13 @@ export default function VendorComparisonTable() {
           </table>
         </div>
       </CardContent>
+
+      {/* Vendor Detail Modal */}
+      <VendorDetailModal
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        vendor={selectedVendor}
+      />
     </Card>
   );
 }
