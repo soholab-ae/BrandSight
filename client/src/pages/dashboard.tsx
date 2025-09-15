@@ -6,7 +6,7 @@ import AppHeader from "@/components/AppHeader";
 import Sidebar from "@/components/Sidebar";
 import DateRangePicker from "@/components/DateRangePicker";
 import MetricsGrid from "@/components/MetricsGrid";
-import RevenueChart from "@/components/RevenueChart";
+import VendorPerformanceChart from "@/components/VendorPerformanceChart";
 import TopProducts from "@/components/TopProducts";
 import VendorComparisonTable from "@/components/VendorComparisonTable";
 import LandingPagesAnalysis from "@/components/LandingPagesAnalysis";
@@ -136,9 +136,13 @@ export default function Dashboard() {
           {/* Key Metrics Cards */}
           <MetricsGrid />
 
-          {/* Charts and Products */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            <RevenueChart />
+          {/* Interactive Performance Chart */}
+          <div className="mb-8">
+            <VendorPerformanceChart />
+          </div>
+
+          {/* Top Products Card */}
+          <div className="mb-8">
             <TopProducts />
           </div>
 
