@@ -86,7 +86,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createStore(store: InsertStore): Promise<Store> {
-    const [newStore] = await db.insert(stores).values(store).returning();
+    const [newStore] = await db.insert(stores).values([store]).returning();
     return newStore;
   }
 
@@ -222,7 +222,13 @@ export class DatabaseStorage implements IStorage {
     vendorId?: string,
     limit: number = 10
   ): Promise<any[]> {
-    let query = db
+    const conditions = [eq(orders.storeId, storeId)];
+    
+    if (vendorId) {
+      conditions.push(eq(orderLineItems.vendorId, vendorId));
+    }
+
+    return await db
       .select({
         productId: orderLineItems.productId,
         title: orderLineItems.title,
@@ -232,19 +238,10 @@ export class DatabaseStorage implements IStorage {
       })
       .from(orderLineItems)
       .innerJoin(orders, eq(orders.id, orderLineItems.orderId))
-      .where(eq(orders.storeId, storeId))
+      .where(and(...conditions))
       .groupBy(orderLineItems.productId, orderLineItems.title, orderLineItems.vendor)
       .orderBy(desc(sql`SUM(${orderLineItems.price} * ${orderLineItems.quantity})`))
       .limit(limit);
-
-    if (vendorId) {
-      query = query.where(and(
-        eq(orders.storeId, storeId),
-        eq(orderLineItems.vendorId, vendorId)
-      ));
-    }
-
-    return await query;
   }
 
   async getTopLandingPages(
