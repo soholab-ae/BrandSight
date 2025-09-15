@@ -46,6 +46,44 @@ export default function VendorComparisonTable() {
     setSelectedVendor(null);
   };
 
+  const handleExportCSV = () => {
+    const exportData: VendorExportData[] = filteredAndSortedVendors.map(vendor => ({
+      id: vendor.id,
+      name: vendor.name,
+      revenue: vendor.revenue,
+      aov: vendor.aov,
+      conversion: vendor.conversion,
+      visitors: vendor.visitors,
+      productCount: vendor.productCount,
+      growth: vendor.growth
+    }));
+
+    const dateRangeText = `${filteredAndSortedVendors.length} vendors`;
+    exportToCSV(exportData, {
+      filename: 'vendor-analytics-comparison',
+      dateRange: dateRangeText
+    });
+  };
+
+  const handleExportExcel = () => {
+    const exportData: VendorExportData[] = filteredAndSortedVendors.map(vendor => ({
+      id: vendor.id,
+      name: vendor.name,
+      revenue: vendor.revenue,
+      aov: vendor.aov,
+      conversion: vendor.conversion,
+      visitors: vendor.visitors,
+      productCount: vendor.productCount,
+      growth: vendor.growth
+    }));
+
+    const dateRangeText = `${filteredAndSortedVendors.length} vendors`;
+    exportToExcel(exportData, {
+      filename: 'vendor-analytics-comparison',
+      dateRange: dateRangeText
+    });
+  };
+
   const handleSort = (field: keyof VendorMetrics) => {
     if (sortField === field) {
       setSortDirection(sortDirection === "asc" ? "desc" : "asc");
@@ -59,36 +97,6 @@ export default function VendorComparisonTable() {
     if (sortField !== field) return <ArrowUpDown className="w-4 h-4 text-gray-400" />;
     return sortDirection === "asc" ? <ArrowUp className="w-4 h-4 text-blue-600" /> : <ArrowDown className="w-4 h-4 text-blue-600" />;
   };
-
-  if (isLoading) {
-    return (
-      <Card className="shadow-sm border border-gray-200 p-6 mb-8">
-        <div className="flex items-center justify-between mb-6">
-          <Skeleton className="h-6 w-48" />
-          <div className="flex space-x-2">
-            <Skeleton className="h-9 w-20" />
-            <Skeleton className="h-9 w-20" />
-          </div>
-        </div>
-        <div className="space-y-4">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="flex items-center space-x-4 py-3">
-              <Skeleton className="w-8 h-8 rounded-lg" />
-              <div className="flex-1 space-y-2">
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-3 w-16" />
-              </div>
-              <Skeleton className="h-4 w-16" />
-              <Skeleton className="h-4 w-16" />
-              <Skeleton className="h-4 w-12" />
-              <Skeleton className="h-4 w-12" />
-              <Skeleton className="h-6 w-16" />
-            </div>
-          ))}
-        </div>
-      </Card>
-    );
-  }
 
   // Mock data for demonstration since we don't have real data yet
   const mockVendors: VendorMetrics[] = [
@@ -172,8 +180,8 @@ export default function VendorComparisonTable() {
       }
     }
 
-    // Apply sorting
-    filtered.sort((a, b) => {
+    // Apply sorting - make a copy to avoid mutating the original array
+    const sorted = [...filtered].sort((a, b) => {
       const aValue = a[sortField];
       const bValue = b[sortField];
       
@@ -187,8 +195,38 @@ export default function VendorComparisonTable() {
       return sortDirection === "asc" ? comparison : -comparison;
     });
 
-    return filtered;
+    return sorted;
   }, [searchTerm, revenueFilter, growthFilter, sortField, sortDirection]);
+
+  if (isLoading) {
+    return (
+      <Card className="shadow-sm border border-gray-200 p-6 mb-8">
+        <div className="flex items-center justify-between mb-6">
+          <Skeleton className="h-6 w-48" />
+          <div className="flex space-x-2">
+            <Skeleton className="h-9 w-20" />
+            <Skeleton className="h-9 w-20" />
+          </div>
+        </div>
+        <div className="space-y-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="flex items-center space-x-4 py-3">
+              <Skeleton className="w-8 h-8 rounded-lg" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-3 w-16" />
+              </div>
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-4 w-12" />
+              <Skeleton className="h-4 w-12" />
+              <Skeleton className="h-6 w-16" />
+            </div>
+          ))}
+        </div>
+      </Card>
+    );
+  }
 
   const vendorColors: Record<string, string> = {
     Nike: "from-red-500 to-red-600",
@@ -205,15 +243,43 @@ export default function VendorComparisonTable() {
             Vendor Performance Comparison
           </CardTitle>
           <div className="flex items-center space-x-2">
-            <Button 
-              variant="outline" 
-              size="sm"
-              className="text-gray-700 hover:bg-gray-50"
-              data-testid="button-export-vendors"
-            >
-              <Download size={16} className="mr-1" />
-              Export
-            </Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="text-gray-700 hover:bg-gray-50"
+                  data-testid="button-export-vendors"
+                >
+                  <Download size={16} className="mr-1" />
+                  Export
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-48 p-2">
+                <div className="space-y-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleExportCSV}
+                    className="w-full justify-start text-gray-700 hover:bg-gray-50"
+                    data-testid="button-export-csv"
+                  >
+                    <FileSpreadsheet size={16} className="mr-2" />
+                    Export as CSV
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleExportExcel}
+                    className="w-full justify-start text-gray-700 hover:bg-gray-50"
+                    data-testid="button-export-excel"
+                  >
+                    <FileSpreadsheet size={16} className="mr-2" />
+                    Export as Excel
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
             <Popover>
               <PopoverTrigger asChild>
                 <Button 
