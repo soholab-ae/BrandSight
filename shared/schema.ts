@@ -37,7 +37,7 @@ export const users = pgTable("users", {
 
 // Shopify stores
 export const stores = pgTable("stores", {
-  id: varchar("id").primaryKey(),
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
   name: varchar("name").notNull(),
   domain: varchar("domain").notNull(),
