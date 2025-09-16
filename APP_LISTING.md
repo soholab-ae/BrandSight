@@ -135,7 +135,7 @@ Analytics and reporting
 United States, Canada, United Kingdom, Australia, Germany, France, Netherlands, Singapore, India, Japan
 
 ## Languages Supported
-English (primary), with interface available in French, German, Spanish, Italian, Dutch, Portuguese, Japanese
+English
 
 ## Requirements
 - Shopify Plus, Advanced, Shopify, or Basic Shopify plan

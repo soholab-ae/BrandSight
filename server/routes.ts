@@ -53,6 +53,130 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return stores[0];
   };
 
+  // Legal documents - publicly accessible
+  app.get('/legal/privacy', (_req, res) => {
+    res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy - BrandSight</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 2rem; line-height: 1.6; color: #333; }
+    h1, h2 { color: #111; }
+    h1 { border-bottom: 2px solid #e0e0e0; padding-bottom: 0.5rem; }
+    h2 { margin-top: 2rem; }
+    p { margin: 1rem 0; }
+    ul { margin: 1rem 0; padding-left: 2rem; }
+    .update-date { color: #666; font-style: italic; }
+  </style>
+</head>
+<body>
+  <h1>Privacy Policy</h1>
+  <p class="update-date">Last Updated: January 2025</p>
+  
+  <h2>1. Information We Collect</h2>
+  <p>BrandSight collects and processes the following data from your Shopify store:</p>
+  <ul>
+    <li>Product information including vendor/brand data</li>
+    <li>Order and transaction data</li>
+    <li>Customer analytics (aggregated, non-personally identifiable)</li>
+    <li>Store configuration and settings</li>
+  </ul>
+  
+  <h2>2. How We Use Your Data</h2>
+  <p>We use your data exclusively to provide analytics services:</p>
+  <ul>
+    <li>Generate vendor/brand performance reports</li>
+    <li>Calculate metrics like AOV, conversion rates, and revenue</li>
+    <li>Provide insights and recommendations</li>
+    <li>Improve our analytics algorithms</li>
+  </ul>
+  
+  <h2>3. Data Security</h2>
+  <p>We implement industry-standard security measures including:</p>
+  <ul>
+    <li>End-to-end encryption for data transmission</li>
+    <li>Secure database storage with access controls</li>
+    <li>Regular security audits and updates</li>
+    <li>GDPR and CCPA compliance</li>
+  </ul>
+  
+  <h2>4. Data Retention</h2>
+  <p>We retain your data for as long as you maintain an active subscription. Upon cancellation, your data is deleted within 30 days unless legally required to retain it longer.</p>
+  
+  <h2>5. Your Rights</h2>
+  <p>You have the right to:</p>
+  <ul>
+    <li>Access your data</li>
+    <li>Request data correction or deletion</li>
+    <li>Export your data</li>
+    <li>Opt-out of certain data processing</li>
+  </ul>
+  
+  <h2>6. Contact Us</h2>
+  <p>For privacy concerns or data requests, contact us at: support@brandsight.app</p>
+</body>
+</html>`);
+  });
+  
+  app.get('/legal/terms', (_req, res) => {
+    res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terms of Service - BrandSight</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 2rem; line-height: 1.6; color: #333; }
+    h1, h2 { color: #111; }
+    h1 { border-bottom: 2px solid #e0e0e0; padding-bottom: 0.5rem; }
+    h2 { margin-top: 2rem; }
+    p { margin: 1rem 0; }
+    ul { margin: 1rem 0; padding-left: 2rem; }
+    .update-date { color: #666; font-style: italic; }
+  </style>
+</head>
+<body>
+  <h1>Terms of Service</h1>
+  <p class="update-date">Last Updated: January 2025</p>
+  
+  <h2>1. Service Description</h2>
+  <p>BrandSight provides vendor and brand analytics services for Shopify stores. By using our service, you agree to these terms.</p>
+  
+  <h2>2. Acceptable Use</h2>
+  <p>You agree to:</p>
+  <ul>
+    <li>Provide accurate store information</li>
+    <li>Use the service only for legitimate business purposes</li>
+    <li>Not attempt to access other users' data</li>
+    <li>Comply with all applicable laws and Shopify's terms</li>
+  </ul>
+  
+  <h2>3. Subscription and Billing</h2>
+  <p>Subscription fees are billed monthly through Shopify's billing system. You may cancel at any time, with cancellation taking effect at the end of your current billing period.</p>
+  
+  <h2>4. Limitation of Liability</h2>
+  <p>BrandSight is provided "as is" without warranties. We are not liable for any indirect, incidental, or consequential damages arising from your use of the service.</p>
+  
+  <h2>5. Data Processing</h2>
+  <p>By using BrandSight, you authorize us to access and process your Shopify store data as described in our Privacy Policy.</p>
+  
+  <h2>6. Termination</h2>
+  <p>We reserve the right to terminate or suspend access to our service for violations of these terms or for any other reason at our discretion.</p>
+  
+  <h2>7. Changes to Terms</h2>
+  <p>We may update these terms at any time. Continued use of the service constitutes acceptance of the updated terms.</p>
+  
+  <h2>8. Governing Law</h2>
+  <p>These terms are governed by the laws of Delaware, United States. Any disputes shall be resolved through binding arbitration.</p>
+  
+  <h2>9. Contact</h2>
+  <p>For questions about these terms, contact us at: support@brandsight.app</p>
+</body>
+</html>`);
+  });
+
   // Auth routes
   app.get('/api/auth/user', authenticate, async (req: any, res) => {
     try {
