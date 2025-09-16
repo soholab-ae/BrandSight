@@ -435,10 +435,11 @@ export async function setupShopifyAuth(app: Express) {
   
   // Login route that redirects to OAuth
   app.get('/api/login', (req, res) => {
-    const shop = req.query.shop as string;
+    const shop = req.query.shop as string || process.env.DEFAULT_SHOP_DOMAIN || '';
     
     // If shop parameter is provided, redirect to auth with shop
     if (shop) {
+      console.log(`Initiating OAuth for shop: ${shop}`);
       res.redirect(`/api/auth?shop=${shop}`);
     } else {
       // Check if we're in Shopify admin (embedded app)
@@ -617,8 +618,24 @@ export async function setupShopifyAuth(app: Express) {
     next();
   });
   
-  // Protected routes middleware
-  app.use("/api/*", shopifyInstance.validateAuthenticatedSession());
+  // Protected routes middleware - but exclude auth routes
+  app.use((req, res, next) => {
+    // Skip validation for auth routes and login
+    if (req.path === '/api/auth' || 
+        req.path === '/api/auth/callback' || 
+        req.path === '/api/login' ||
+        req.path === '/api/webhooks' ||
+        req.path.startsWith('/legal/')) {
+      return next();
+    }
+    
+    // Apply validation to other API routes
+    if (req.path.startsWith('/api/')) {
+      return shopifyInstance.validateAuthenticatedSession()(req, res, next);
+    }
+    
+    next();
+  });
   
   console.log("Shopify authentication configured");
 }

@@ -60,14 +60,14 @@ function OnboardingRouter() {
       {/* Main route logic - redirect based on user state */}
       <Route path="/">
         {() => {
-          // If there's an error fetching stores, assume they need to set up
+          // Skip welcome screen if there's an error - go straight to setup
           if (hasError) {
-            return <Welcome />;
+            return <Setup />;
           }
           
-          // If user has no stores, start onboarding flow
+          // If user has no stores, go straight to setup (skip welcome)
           if (!hasStores) {
-            return <Welcome />;
+            return <Setup />;
           }
           
           // User has stores - show dashboard
@@ -79,7 +79,7 @@ function OnboardingRouter() {
       <Route>
         {() => {
           if (hasError || !hasStores) {
-            return <Welcome />;
+            return <Setup />;
           }
           return <Dashboard />;
         }}
