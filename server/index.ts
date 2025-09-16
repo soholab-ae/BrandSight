@@ -6,6 +6,33 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Add CSP headers for Shopify embedded app to work in Firefox
+app.use((req, res, next) => {
+  // Get shop from various sources
+  const shop = req.query.shop as string || 
+               req.headers['x-shopify-shop'] as string ||
+               process.env.DEFAULT_SHOP_DOMAIN;
+  
+  if (shop) {
+    // Set Content-Security-Policy to allow embedding in Shopify admin
+    res.setHeader(
+      'Content-Security-Policy',
+      `frame-ancestors https://${shop} https://admin.shopify.com;`
+    );
+  } else {
+    // For non-embedded contexts, allow self
+    res.setHeader(
+      'Content-Security-Policy',
+      `frame-ancestors 'self';`
+    );
+  }
+  
+  // Remove X-Frame-Options header as it conflicts with CSP
+  res.removeHeader('X-Frame-Options');
+  
+  next();
+});
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
