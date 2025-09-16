@@ -388,6 +388,46 @@ export async function setupShopifyAuth(app: Express) {
   // Apply Shopify middleware
   app.use(shopifyInstance.cspHeaders());
   
+  // Add dynamic CSP headers for embedded app
+  app.use((req, res, next) => {
+    const shop = req.query.shop || req.headers['x-shopify-shop-domain'];
+    
+    if (shop || req.path === '/' || req.path.startsWith('/welcome')) {
+      // Modify only the frame-ancestors directive, keeping other CSP rules
+      const existingCSP = res.getHeader('Content-Security-Policy') as string || '';
+      
+      // Build frame-ancestors based on shop
+      let frameAncestors = 'https://admin.shopify.com https://*.myshopify.com';
+      if (shop) {
+        frameAncestors = `https://${shop} https://admin.shopify.com`;
+      }
+      
+      // If there's an existing CSP, update frame-ancestors; otherwise set a complete policy
+      if (existingCSP) {
+        // Replace frame-ancestors directive if it exists, otherwise append it
+        const updatedCSP = existingCSP.replace(
+          /frame-ancestors[^;]*(;|$)/,
+          `frame-ancestors ${frameAncestors};`
+        );
+        
+        // If no frame-ancestors was found, append it
+        if (updatedCSP === existingCSP) {
+          res.setHeader('Content-Security-Policy', `${existingCSP} frame-ancestors ${frameAncestors};`);
+        } else {
+          res.setHeader('Content-Security-Policy', updatedCSP);
+        }
+      } else {
+        // Set a complete CSP if none exists
+        res.setHeader(
+          'Content-Security-Policy',
+          `default-src 'self' https://*.myshopify.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.shopify.com; style-src 'self' 'unsafe-inline' https://cdn.shopify.com; img-src 'self' data: https:; font-src 'self' data: https:; connect-src 'self' https://*.myshopify.com; frame-ancestors ${frameAncestors};`
+        );
+      }
+    }
+    
+    next();
+  });
+  
   // Auth routes
   app.get(shopifyInstance.config.auth.path, shopifyInstance.auth.begin());
   app.get(
@@ -529,6 +569,19 @@ export async function setupShopifyAuth(app: Express) {
 
   // Webhook endpoint
   app.post(shopifyInstance.config.webhooks.path, shopifyInstance.processWebhooks({ webhookHandlers }));
+  
+  // Ensure the app can be embedded
+  app.use((req, res, next) => {
+    // Add X-Frame-Options header for specific routes
+    const shop = req.query.shop || req.headers['x-shopify-shop-domain'];
+    
+    if (shop && !req.path.startsWith('/api/')) {
+      // Remove X-Frame-Options to allow embedding
+      res.removeHeader('X-Frame-Options');
+    }
+    
+    next();
+  });
   
   // Protected routes middleware
   app.use("/api/*", shopifyInstance.validateAuthenticatedSession());
