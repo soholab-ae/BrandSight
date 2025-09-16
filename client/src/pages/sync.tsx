@@ -19,6 +19,7 @@ import {
   BarChart,
   AlertCircle
 } from "lucide-react";
+import logoUrl from "@/assets/logo.png";
 
 interface SyncStep {
   id: string;
@@ -129,16 +130,13 @@ export default function Sync() {
   }));
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-shopify-50 to-white">
+    <div className="min-h-screen bg-gradient-to-br from-brand-50 to-white">
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-shopify-500 rounded-lg flex items-center justify-center">
-                <BarChart3 className="text-white" size={20} />
-              </div>
-              <h1 className="text-xl font-bold text-gray-900">Vendorlytics</h1>
+            <div className="flex items-center">
+              <img src={logoUrl} alt="BrandSight" className="h-10 w-auto" />
             </div>
             <div className="flex items-center space-x-3">
               <Badge 
@@ -172,13 +170,13 @@ export default function Sync() {
         {/* Main Sync Card */}
         <Card className="mb-8">
           <CardHeader className="text-center">
-            <div className="w-16 h-16 bg-shopify-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center mx-auto mb-4">
               {isComplete ? (
                 <CheckCircle className="w-8 h-8 text-green-600" />
               ) : error ? (
                 <AlertCircle className="w-8 h-8 text-red-600" />
               ) : (
-                <Database className="w-8 h-8 text-shopify-600" />
+                <Database className="w-8 h-8 text-brand-600" />
               )}
             </div>
             <CardTitle className="text-2xl" data-testid="heading-sync-status">
@@ -216,7 +214,7 @@ export default function Sync() {
                     key={step.id} 
                     className={`flex items-center space-x-4 p-4 rounded-lg border ${
                       step.status === 'completed' ? 'bg-green-50 border-green-200' :
-                      step.status === 'in_progress' ? 'bg-shopify-50 border-shopify-200' :
+                      step.status === 'in_progress' ? 'bg-brand-50 border-brand-200' :
                       step.status === 'error' ? 'bg-red-50 border-red-200' :
                       'bg-gray-50 border-gray-200'
                     }`}
@@ -224,14 +222,14 @@ export default function Sync() {
                   >
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
                       step.status === 'completed' ? 'bg-green-100' :
-                      step.status === 'in_progress' ? 'bg-shopify-100' :
+                      step.status === 'in_progress' ? 'bg-brand-100' :
                       step.status === 'error' ? 'bg-red-100' :
                       'bg-gray-100'
                     }`}>
                       {step.status === 'completed' ? (
                         <CheckCircle className="w-5 h-5 text-green-600" />
                       ) : step.status === 'in_progress' ? (
-                        <Loader2 className="w-5 h-5 text-shopify-600 animate-spin" />
+                        <Loader2 className="w-5 h-5 text-brand-600 animate-spin" />
                       ) : step.status === 'error' ? (
                         <AlertCircle className="w-5 h-5 text-red-600" />
                       ) : (
@@ -241,7 +239,7 @@ export default function Sync() {
                     <div className="flex-1">
                       <h3 className={`font-semibold ${
                         step.status === 'completed' ? 'text-green-900' :
-                        step.status === 'in_progress' ? 'text-shopify-900' :
+                        step.status === 'in_progress' ? 'text-brand-900' :
                         step.status === 'error' ? 'text-red-900' :
                         'text-gray-500'
                       }`} data-testid={`step-title-${step.id}`}>
@@ -249,7 +247,7 @@ export default function Sync() {
                       </h3>
                       <p className={`text-sm ${
                         step.status === 'completed' ? 'text-green-700' :
-                        step.status === 'in_progress' ? 'text-shopify-700' :
+                        step.status === 'in_progress' ? 'text-brand-700' :
                         step.status === 'error' ? 'text-red-700' :
                         'text-gray-500'
                       }`} data-testid={`step-description-${step.id}`}>
@@ -265,7 +263,7 @@ export default function Sync() {
                       </Badge>
                     )}
                     {step.status === 'in_progress' && (
-                      <Badge variant="secondary" className="bg-shopify-100 text-shopify-700" data-testid={`badge-processing-${step.id}`}>
+                      <Badge variant="secondary" className="bg-brand-100 text-brand-700" data-testid={`badge-processing-${step.id}`}>
                         Processing...
                       </Badge>
                     )}
@@ -317,7 +315,7 @@ export default function Sync() {
                 <Button 
                   onClick={handleGoToDashboard}
                   size="lg"
-                  className="bg-shopify-600 hover:bg-shopify-700 px-8 py-3"
+                  className="bg-brand-600 hover:bg-brand-700 px-8 py-3"
                   data-testid="button-go-dashboard"
                 >
                   Go to Dashboard

@@ -86,7 +86,7 @@ export default function LandingPagesAnalysis() {
             <Button 
               variant="ghost" 
               size="sm"
-              className="text-shopify-600 hover:text-shopify-700 font-medium"
+              className="text-brand-600 hover:text-brand-700 font-medium"
               data-testid="button-view-all-pages"
             >
               View All

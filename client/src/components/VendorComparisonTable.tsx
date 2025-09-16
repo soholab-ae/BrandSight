@@ -488,7 +488,7 @@ export default function VendorComparisonTable({ dateRange }: VendorComparisonTab
                         {vendor.name[0]}
                       </div>
                       <div className="ml-3">
-                        <div className="text-sm font-medium text-gray-900 hover:text-shopify-600 transition-colors" data-testid={`text-vendor-name-${vendor.id}`}>
+                        <div className="text-sm font-medium text-gray-900 hover:text-brand-600 transition-colors" data-testid={`text-vendor-name-${vendor.id}`}>
                           {vendor.name}
                         </div>
                         <div className="text-sm text-gray-500" data-testid={`text-product-count-${vendor.id}`}>

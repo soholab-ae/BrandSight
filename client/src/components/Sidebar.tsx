@@ -71,7 +71,7 @@ export default function Sidebar() {
                   className={cn(
                     "flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors",
                     isActive 
-                      ? "text-shopify-600 bg-shopify-50" 
+                      ? "text-brand-600 bg-brand-50" 
                       : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                   )}
                   data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}

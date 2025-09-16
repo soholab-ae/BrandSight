@@ -45,7 +45,7 @@ export default function Dashboard() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-shopify-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-brand-600 mx-auto mb-4"></div>
           <h2 className="text-lg font-medium text-gray-900">Loading dashboard...</h2>
         </div>
       </div>
@@ -121,8 +121,8 @@ export default function Dashboard() {
             
             {/* Date Range Display */}
             {dateRange?.from && (
-              <div className="mt-4 p-3 bg-shopify-50 border border-shopify-200 rounded-lg">
-                <p className="text-sm text-shopify-700" data-testid="text-active-date-range">
+              <div className="mt-4 p-3 bg-brand-50 border border-brand-200 rounded-lg">
+                <p className="text-sm text-brand-700" data-testid="text-active-date-range">
                   <span className="font-medium">Showing data for:</span> {' '}
                   {dateRange.to 
                     ? `${dateRange.from.toLocaleDateString()} - ${dateRange.to.toLocaleDateString()}`
