@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart3, TrendingUp, Users, ShoppingBag } from "lucide-react";
+import logoUrl from "@/assets/logo.png";
 
 export default function Landing() {
   const handleLogin = () => {
@@ -17,20 +18,17 @@ export default function Landing() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-shopify-50 to-white">
+    <div className="min-h-screen bg-gradient-to-br from-brand-50 to-white">
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-shopify-500 rounded-lg flex items-center justify-center">
-                <BarChart3 className="text-white" size={20} />
-              </div>
-              <h1 className="text-xl font-bold text-gray-900">BrandSight</h1>
+            <div className="flex items-center">
+              <img src={logoUrl} alt="BrandSight" className="h-10 w-auto" />
             </div>
             <Button 
               onClick={handleLogin}
-              className="bg-shopify-600 hover:bg-shopify-700"
+              className="bg-brand-600 hover:bg-brand-700"
               data-testid="button-login"
             >
               Get Started
@@ -52,7 +50,7 @@ export default function Landing() {
           <Button 
             onClick={handleLogin}
             size="lg"
-            className="bg-shopify-600 hover:bg-shopify-700 px-8 py-3 text-lg"
+            className="bg-brand-600 hover:bg-brand-700 px-8 py-3 text-lg"
             data-testid="button-hero-login"
           >
             Connect Your Store
@@ -107,8 +105,8 @@ export default function Landing() {
 
           <Card className="text-center">
             <CardHeader>
-              <div className="w-12 h-12 bg-shopify-100 rounded-lg flex items-center justify-center mx-auto mb-4">
-                <BarChart3 className="text-shopify-600" size={24} />
+              <div className="w-12 h-12 bg-brand-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                <BarChart3 className="text-brand-600" size={24} />
               </div>
               <CardTitle className="text-lg">Landing Pages</CardTitle>
             </CardHeader>
@@ -122,19 +120,19 @@ export default function Landing() {
       </div>
 
       {/* CTA Section */}
-      <div className="bg-shopify-600 text-white py-16">
+      <div className="bg-brand-600 text-white py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h3 className="text-3xl font-bold mb-4">
             Ready to unlock brand-specific insights?
           </h3>
-          <p className="text-xl mb-8 text-shopify-100">
+          <p className="text-xl mb-8 text-brand-100">
             Connect your Shopify store in minutes and start analyzing your brand performance.
           </p>
           <Button 
             onClick={handleLogin}
             size="lg"
             variant="secondary"
-            className="bg-white text-shopify-600 hover:bg-gray-100 px-8 py-3 text-lg"
+            className="bg-white text-brand-600 hover:bg-gray-100 px-8 py-3 text-lg"
             data-testid="button-cta-login"
           >
             Get Started Now

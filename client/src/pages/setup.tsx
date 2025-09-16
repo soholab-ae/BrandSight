@@ -29,6 +29,7 @@ import {
   AlertCircle,
   ExternalLink
 } from "lucide-react";
+import logoUrl from "@/assets/logo.png";
 
 // Extended form schema with validation
 const setupFormSchema = insertStoreSchema.extend({
@@ -119,16 +120,13 @@ export default function Setup() {
   const stepProgress = (currentStep / totalSteps) * 100;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-shopify-50 to-white">
+    <div className="min-h-screen bg-gradient-to-br from-brand-50 to-white">
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-shopify-500 rounded-lg flex items-center justify-center">
-                <BarChart3 className="text-white" size={20} />
-              </div>
-              <h1 className="text-xl font-bold text-gray-900">Vendorlytics</h1>
+            <div className="flex items-center">
+              <img src={logoUrl} alt="BrandSight" className="h-10 w-auto" />
             </div>
             <div className="flex items-center space-x-3">
               <Badge variant="outline" data-testid="badge-setup-progress">
@@ -227,7 +225,7 @@ export default function Setup() {
                             href="https://help.shopify.com/en/manual/apps/private-apps" 
                             target="_blank" 
                             rel="noopener noreferrer"
-                            className="text-shopify-600 hover:text-shopify-700 inline-flex items-center"
+                            className="text-brand-600 hover:text-brand-700 inline-flex items-center"
                             data-testid="link-token-help"
                           >
                             View guide
@@ -267,7 +265,7 @@ export default function Setup() {
                     <Button 
                       type="button" 
                       onClick={handleNextStep}
-                      className="bg-shopify-600 hover:bg-shopify-700"
+                      className="bg-brand-600 hover:bg-brand-700"
                       data-testid="button-next-step"
                     >
                       Next: Learn About Features
@@ -346,7 +344,7 @@ export default function Setup() {
                 </Button>
                 <Button 
                   onClick={handleNextStep}
-                  className="bg-shopify-600 hover:bg-shopify-700"
+                  className="bg-brand-600 hover:bg-brand-700"
                   data-testid="button-next-sync"
                 >
                   Next: Data Sync Process
@@ -373,8 +371,8 @@ export default function Setup() {
 
               <div className="space-y-4">
                 <div className="flex items-start space-x-4" data-testid="sync-step-1">
-                  <div className="w-8 h-8 bg-shopify-100 rounded-full flex items-center justify-center">
-                    <span className="text-shopify-600 font-bold text-sm">1</span>
+                  <div className="w-8 h-8 bg-brand-100 rounded-full flex items-center justify-center">
+                    <span className="text-brand-600 font-bold text-sm">1</span>
                   </div>
                   <div>
                     <h3 className="font-semibold text-gray-900 mb-1">Import Products & Orders</h3>
@@ -385,8 +383,8 @@ export default function Setup() {
                 </div>
 
                 <div className="flex items-start space-x-4" data-testid="sync-step-2">
-                  <div className="w-8 h-8 bg-shopify-100 rounded-full flex items-center justify-center">
-                    <span className="text-shopify-600 font-bold text-sm">2</span>
+                  <div className="w-8 h-8 bg-brand-100 rounded-full flex items-center justify-center">
+                    <span className="text-brand-600 font-bold text-sm">2</span>
                   </div>
                   <div>
                     <h3 className="font-semibold text-gray-900 mb-1">Organize by Vendor</h3>
@@ -397,8 +395,8 @@ export default function Setup() {
                 </div>
 
                 <div className="flex items-start space-x-4" data-testid="sync-step-3">
-                  <div className="w-8 h-8 bg-shopify-100 rounded-full flex items-center justify-center">
-                    <span className="text-shopify-600 font-bold text-sm">3</span>
+                  <div className="w-8 h-8 bg-brand-100 rounded-full flex items-center justify-center">
+                    <span className="text-brand-600 font-bold text-sm">3</span>
                   </div>
                   <div>
                     <h3 className="font-semibold text-gray-900 mb-1">Generate Analytics</h3>
@@ -435,7 +433,7 @@ export default function Setup() {
                 </Button>
                 <Button 
                   onClick={handleNextStep}
-                  className="bg-shopify-600 hover:bg-shopify-700"
+                  className="bg-brand-600 hover:bg-brand-700"
                   data-testid="button-next-final"
                 >
                   Next: Ready to Connect
@@ -469,11 +467,11 @@ export default function Setup() {
                 </p>
               </div>
 
-              <div className="bg-shopify-50 border border-shopify-200 rounded-lg p-6">
-                <h4 className="font-semibold text-shopify-900 mb-3" data-testid="heading-what-happens">
+              <div className="bg-brand-50 border border-brand-200 rounded-lg p-6">
+                <h4 className="font-semibold text-brand-900 mb-3" data-testid="heading-what-happens">
                   What happens next:
                 </h4>
-                <ul className="space-y-2 text-sm text-shopify-700">
+                <ul className="space-y-2 text-sm text-brand-700">
                   <li className="flex items-center space-x-2" data-testid="list-item-1">
                     <CheckCircle className="w-4 h-4" />
                     <span>Store connection is established securely</span>
@@ -505,7 +503,7 @@ export default function Setup() {
                 <Button 
                   onClick={form.handleSubmit(onSubmit)}
                   disabled={createStoreMutation.isPending}
-                  className="bg-shopify-600 hover:bg-shopify-700"
+                  className="bg-brand-600 hover:bg-brand-700"
                   data-testid="button-connect-store"
                 >
                   {createStoreMutation.isPending ? (

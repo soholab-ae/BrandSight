@@ -155,7 +155,7 @@ export default function VendorPerformanceChart({ dateRange }: VendorPerformanceC
       <CardHeader>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-2">
-            <Icon className="h-5 w-5 text-shopify-600" />
+            <Icon className="h-5 w-5 text-brand-600" />
             <CardTitle className="text-lg font-semibold text-gray-900">
               {metricInfo.title} by Vendor
             </CardTitle>
@@ -169,7 +169,7 @@ export default function VendorPerformanceChart({ dateRange }: VendorPerformanceC
                 variant={selectedMetric === 'revenue' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setSelectedMetric('revenue')}
-                className={selectedMetric === 'revenue' ? 'bg-shopify-600 hover:bg-shopify-700' : ''}
+                className={selectedMetric === 'revenue' ? 'bg-brand-600 hover:bg-brand-700' : ''}
                 data-testid="button-metric-revenue"
               >
                 Revenue
@@ -178,7 +178,7 @@ export default function VendorPerformanceChart({ dateRange }: VendorPerformanceC
                 variant={selectedMetric === 'aov' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setSelectedMetric('aov')}
-                className={selectedMetric === 'aov' ? 'bg-shopify-600 hover:bg-shopify-700' : ''}
+                className={selectedMetric === 'aov' ? 'bg-brand-600 hover:bg-brand-700' : ''}
                 data-testid="button-metric-aov"
               >
                 AOV
@@ -187,7 +187,7 @@ export default function VendorPerformanceChart({ dateRange }: VendorPerformanceC
                 variant={selectedMetric === 'conversion' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setSelectedMetric('conversion')}
-                className={selectedMetric === 'conversion' ? 'bg-shopify-600 hover:bg-shopify-700' : ''}
+                className={selectedMetric === 'conversion' ? 'bg-brand-600 hover:bg-brand-700' : ''}
                 data-testid="button-metric-conversion"
               >
                 Conversion

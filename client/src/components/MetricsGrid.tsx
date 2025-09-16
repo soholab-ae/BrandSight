@@ -68,8 +68,8 @@ export default function MetricsGrid() {
       change: "+18.2%",
       changeType: "positive" as const,
       icon: TrendingUp,
-      iconBg: "bg-shopify-100",
-      iconColor: "text-shopify-600",
+      iconBg: "bg-brand-100",
+      iconColor: "text-brand-600",
       testId: "metric-revenue",
     },
   ];

@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle, BarChart3, TrendingUp, Users, ShoppingBag, ArrowRight, Store, Zap } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import logoUrl from "@/assets/logo.png";
 
 export default function Welcome() {
   const { user } = useAuth();
@@ -34,21 +35,18 @@ export default function Welcome() {
       icon: BarChart3,
       title: "Landing Pages",
       description: "Identify top-performing landing pages by vendor and collection.",
-      color: "bg-shopify-100 text-shopify-600"
+      color: "bg-brand-100 text-brand-600"
     }
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-shopify-50 to-white">
+    <div className="min-h-screen bg-gradient-to-br from-brand-50 to-white">
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-shopify-500 rounded-lg flex items-center justify-center">
-                <BarChart3 className="text-white" size={20} />
-              </div>
-              <h1 className="text-xl font-bold text-gray-900">BrandSight</h1>
+            <div className="flex items-center">
+              <img src={logoUrl} alt="BrandSight" className="h-10 w-auto" />
             </div>
             <div className="flex items-center space-x-3">
               <Badge variant="secondary" className="bg-green-100 text-green-700" data-testid="badge-connection-status">
@@ -58,7 +56,7 @@ export default function Welcome() {
               {user && (user as any).firstName && (
                 <div className="flex items-center space-x-2">
                   <img 
-                    src={(user as any).profileImageUrl || `https://ui-avatars.com/api/?name=${(user as any).firstName}+${(user as any).lastName}&background=shopify-600&color=fff`}
+                    src={(user as any).profileImageUrl || `https://ui-avatars.com/api/?name=${(user as any).firstName}+${(user as any).lastName}&background=brand-600&color=fff`}
                     alt={`${(user as any).firstName} ${(user as any).lastName}`}
                     className="w-8 h-8 rounded-full"
                     data-testid="img-user-avatar"
@@ -124,7 +122,7 @@ export default function Welcome() {
         </Card>
 
         {/* Next Steps */}
-        <Card className="mb-8 border-shopify-200 bg-shopify-50">
+        <Card className="mb-8 border-brand-200 bg-brand-50">
           <CardHeader>
             <CardTitle className="text-center flex items-center justify-center space-x-2" data-testid="heading-next-steps">
               <Store className="w-5 h-5" />
@@ -141,21 +139,21 @@ export default function Welcome() {
             <div className="flex items-center justify-center space-x-6 mb-6">
               <div className="text-center">
                 <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center mx-auto mb-2 shadow-sm">
-                  <span className="text-shopify-600 font-bold">1</span>
+                  <span className="text-brand-600 font-bold">1</span>
                 </div>
                 <span className="text-sm text-gray-600">Connect Store</span>
               </div>
               <ArrowRight className="text-gray-400" size={20} />
               <div className="text-center">
                 <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center mx-auto mb-2 shadow-sm">
-                  <span className="text-shopify-600 font-bold">2</span>
+                  <span className="text-brand-600 font-bold">2</span>
                 </div>
                 <span className="text-sm text-gray-600">Sync Data</span>
               </div>
               <ArrowRight className="text-gray-400" size={20} />
               <div className="text-center">
                 <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center mx-auto mb-2 shadow-sm">
-                  <span className="text-shopify-600 font-bold">3</span>
+                  <span className="text-brand-600 font-bold">3</span>
                 </div>
                 <span className="text-sm text-gray-600">View Insights</span>
               </div>
@@ -164,7 +162,7 @@ export default function Welcome() {
             <Button 
               onClick={handleContinueToSetup}
               size="lg"
-              className="bg-shopify-600 hover:bg-shopify-700 px-8 py-3 text-lg"
+              className="bg-brand-600 hover:bg-brand-700 px-8 py-3 text-lg"
               data-testid="button-continue-setup"
             >
               Continue to Setup

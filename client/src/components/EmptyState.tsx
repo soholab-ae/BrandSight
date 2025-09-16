@@ -38,8 +38,8 @@ export default function EmptyState({
       case 'no-stores':
         return {
           icon: Store,
-          iconBg: 'bg-shopify-100',
-          iconColor: 'text-shopify-600',
+          iconBg: 'bg-brand-100',
+          iconColor: 'text-brand-600',
           defaultTitle: 'No Store Connected',
           defaultDescription: 'Connect your Shopify store to start tracking vendor analytics and performance metrics.',
           actionCta: 'Connect Store',
@@ -143,7 +143,7 @@ export default function EmptyState({
           <Button 
             onClick={handleAction}
             variant={action?.variant || 'default'}
-            className={action?.variant === 'default' || !action?.variant ? 'bg-shopify-600 hover:bg-shopify-700' : ''}
+            className={action?.variant === 'default' || !action?.variant ? 'bg-brand-600 hover:bg-brand-700' : ''}
             data-testid="empty-state-action"
           >
             {action?.label || config.actionCta}
@@ -155,7 +155,7 @@ export default function EmptyState({
           <div className="mt-4 text-center">
             <button 
               onClick={() => window.location.href = '/setup'}
-              className="text-sm text-shopify-600 hover:text-shopify-700 underline"
+              className="text-sm text-brand-600 hover:text-brand-700 underline"
               data-testid="link-setup"
             >
               Need to connect a different store?
