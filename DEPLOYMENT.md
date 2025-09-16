@@ -28,13 +28,15 @@ SESSION_SECRET=your_secure_session_secret
 # Shopify Integration (Required for deployment)
 SHOPIFY_API_KEY=your_shopify_api_key
 SHOPIFY_API_SECRET=your_shopify_api_secret
-SCOPES=read_products,read_orders,read_customers,write_webhooks
+SCOPES=read_products,read_orders,read_customers
 HOST=https://your-custom-domain.com
+
+# Required for Shopify App Store
+USE_SHOPIFY_AUTH=true
 
 # Optional
 PORT=5000
 NODE_ENV=production
-USE_SHOPIFY_AUTH=true
 ```
 
 ### Getting Shopify Credentials
