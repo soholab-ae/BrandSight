@@ -45,7 +45,7 @@ interface ShopifyOrder {
 
 export class ShopifyService {
   private async makeShopifyRequest(store: Store, endpoint: string, params?: Record<string, string>) {
-    const url = new URL(`https://${store.domain}/admin/api/2024-01/${endpoint}.json`);
+    const url = new URL(`https://${store.domain}/admin/api/2024-10/${endpoint}.json`);
     
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
@@ -109,7 +109,7 @@ export class ShopifyService {
             status: shopifyProduct.status,
           };
 
-          await storage.createProduct(product);
+          await storage.upsertProduct(product);
         }
 
         // Check for pagination
@@ -170,7 +170,7 @@ export class ShopifyService {
             processedAt: shopifyOrder.processed_at ? new Date(shopifyOrder.processed_at) : null,
           };
 
-          await storage.createOrder(order);
+          await storage.upsertOrder(order);
 
           // Create order line items
           for (const lineItem of shopifyOrder.line_items) {
@@ -190,7 +190,7 @@ export class ShopifyService {
               totalDiscount: lineItem.total_discount,
             };
 
-            await storage.createOrderLineItem(orderLineItem);
+            await storage.upsertOrderLineItem(orderLineItem);
           }
         }
 
@@ -304,7 +304,7 @@ export class ShopifyService {
         processedAt: orderData.processed_at ? new Date(orderData.processed_at) : null,
       };
 
-      await storage.createOrder(order);
+      await storage.upsertOrder(order);
 
       // Create order line items and track affected vendors
       const affectedVendors = new Set<string>();
@@ -338,7 +338,7 @@ export class ShopifyService {
           totalDiscount: lineItem.total_discount,
         };
 
-        await storage.createOrderLineItem(orderLineItem);
+        await storage.upsertOrderLineItem(orderLineItem);
       }
 
       // Regenerate analytics for all affected vendors
@@ -400,7 +400,7 @@ export class ShopifyService {
         status: productData.status,
       };
 
-      await storage.createProduct(product);
+      await storage.upsertProduct(product);
       
       console.log(`Successfully processed product webhook for product ${productData.id}`);
     } catch (error) {

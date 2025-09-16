@@ -35,6 +35,7 @@ export interface IStorage {
   getUserStores(userId: string): Promise<Store[]>;
   createStore(store: InsertStore): Promise<Store>;
   getStore(id: string): Promise<Store | undefined>;
+  getStoreByDomain(domain: string): Promise<Store | undefined>;
   updateStore(id: string, updates: Partial<Store>): Promise<Store>;
   
   // Vendor operations
@@ -43,12 +44,12 @@ export interface IStorage {
   getVendor(id: string): Promise<Vendor | undefined>;
   
   // Product operations
-  createProduct(product: InsertProduct): Promise<Product>;
+  upsertProduct(product: InsertProduct): Promise<Product>;
   getVendorProducts(vendorId: string): Promise<Product[]>;
   
   // Order operations
-  createOrder(order: InsertOrder): Promise<Order>;
-  createOrderLineItem(item: InsertOrderLineItem): Promise<OrderLineItem>;
+  upsertOrder(order: InsertOrder): Promise<Order>;
+  upsertOrderLineItem(item: InsertOrderLineItem): Promise<OrderLineItem>;
   
   // Analytics operations
   upsertVendorAnalytics(analytics: InsertVendorAnalytics): Promise<VendorAnalytics>;
@@ -97,6 +98,11 @@ export class DatabaseStorage implements IStorage {
     return store;
   }
 
+  async getStoreByDomain(domain: string): Promise<Store | undefined> {
+    const [store] = await db.select().from(stores).where(eq(stores.domain, domain));
+    return store;
+  }
+
   async updateStore(id: string, updates: Partial<Store>): Promise<Store> {
     const [store] = await db
       .update(stores)
@@ -122,9 +128,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Product operations
-  async createProduct(product: InsertProduct): Promise<Product> {
-    const [newProduct] = await db.insert(products).values(product).returning();
-    return newProduct;
+  async upsertProduct(product: InsertProduct): Promise<Product> {
+    const [upsertedProduct] = await db
+      .insert(products)
+      .values(product)
+      .onConflictDoUpdate({
+        target: products.id,
+        set: {
+          ...product,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return upsertedProduct;
   }
 
   async getVendorProducts(vendorId: string): Promise<Product[]> {
@@ -132,14 +148,28 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Order operations
-  async createOrder(order: InsertOrder): Promise<Order> {
-    const [newOrder] = await db.insert(orders).values(order).returning();
-    return newOrder;
+  async upsertOrder(order: InsertOrder): Promise<Order> {
+    const [upsertedOrder] = await db
+      .insert(orders)
+      .values(order)
+      .onConflictDoUpdate({
+        target: orders.id,
+        set: order,
+      })
+      .returning();
+    return upsertedOrder;
   }
 
-  async createOrderLineItem(item: InsertOrderLineItem): Promise<OrderLineItem> {
-    const [newItem] = await db.insert(orderLineItems).values(item).returning();
-    return newItem;
+  async upsertOrderLineItem(item: InsertOrderLineItem): Promise<OrderLineItem> {
+    const [upsertedItem] = await db
+      .insert(orderLineItems)
+      .values(item)
+      .onConflictDoUpdate({
+        target: orderLineItems.id,
+        set: item,
+      })
+      .returning();
+    return upsertedItem;
   }
 
   // Analytics operations
