@@ -10,6 +10,10 @@ import Welcome from "@/pages/welcome";
 import Setup from "@/pages/setup";
 import Sync from "@/pages/sync";
 import Dashboard from "@/pages/dashboard";
+import SalesAnalytics from "@/pages/sales";
+import CustomerInsights from "@/pages/customers";
+import ProductPerformance from "@/pages/products";
+import ExportReports from "@/pages/reports";
 
 function OnboardingRouter() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
@@ -56,8 +60,12 @@ function OnboardingRouter() {
       <Route path="/setup" component={Setup} />
       <Route path="/sync" component={Sync} />
       
-      {/* Always show dashboard with demo data */}
+      {/* Main dashboard and analytics pages */}
       <Route path="/" component={Dashboard} />
+      <Route path="/sales" component={SalesAnalytics} />
+      <Route path="/customers" component={CustomerInsights} />
+      <Route path="/products" component={ProductPerformance} />
+      <Route path="/reports" component={ExportReports} />
       <Route path="/vendor/:vendorSlug" component={Dashboard} />
       
       {/* Fallback - show dashboard */}
