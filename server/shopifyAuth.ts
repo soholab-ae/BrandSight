@@ -96,8 +96,131 @@ export async function setupShopifyAuth(app: Express) {
   app.get(shopify.config.auth.path, shopify.auth.begin());
   app.get(shopify.config.auth.callbackPath, shopify.auth.callback(), shopify.redirectToShopifyOrAppRoot());
   
+  // Webhook handlers
+  const webhookHandlers = {
+    'orders/create': async (topic: string, shop: string, body: string, webhookId: string) => {
+      try {
+        console.log(`Received ${topic} webhook from ${shop} (ID: ${webhookId})`);
+        const orderData = JSON.parse(body);
+        
+        // Find the store by shop domain
+        const stores = await storage.getUserStores(`shopify_${shop}`);
+        const store = stores.find(s => s.domain === shop);
+        
+        if (!store) {
+          console.error(`Store not found for shop domain: ${shop}`);
+          return;
+        }
+        
+        // Import and use ShopifyService
+        const { shopifyService } = await import('./services/shopifyService');
+        await shopifyService.handleOrderWebhook(orderData, store.id);
+        
+        console.log(`Successfully processed ${topic} webhook from ${shop}`);
+      } catch (error) {
+        console.error(`Error processing ${topic} webhook from ${shop}:`, error);
+      }
+    },
+    
+    'orders/updated': async (topic: string, shop: string, body: string, webhookId: string) => {
+      try {
+        console.log(`Received ${topic} webhook from ${shop} (ID: ${webhookId})`);
+        const orderData = JSON.parse(body);
+        
+        // Find the store by shop domain
+        const stores = await storage.getUserStores(`shopify_${shop}`);
+        const store = stores.find(s => s.domain === shop);
+        
+        if (!store) {
+          console.error(`Store not found for shop domain: ${shop}`);
+          return;
+        }
+        
+        // Import and use ShopifyService
+        const { shopifyService } = await import('./services/shopifyService');
+        await shopifyService.handleOrderWebhook(orderData, store.id);
+        
+        console.log(`Successfully processed ${topic} webhook from ${shop}`);
+      } catch (error) {
+        console.error(`Error processing ${topic} webhook from ${shop}:`, error);
+      }
+    },
+    
+    'products/create': async (topic: string, shop: string, body: string, webhookId: string) => {
+      try {
+        console.log(`Received ${topic} webhook from ${shop} (ID: ${webhookId})`);
+        const productData = JSON.parse(body);
+        
+        // Find the store by shop domain
+        const stores = await storage.getUserStores(`shopify_${shop}`);
+        const store = stores.find(s => s.domain === shop);
+        
+        if (!store) {
+          console.error(`Store not found for shop domain: ${shop}`);
+          return;
+        }
+        
+        // Import and use ShopifyService
+        const { shopifyService } = await import('./services/shopifyService');
+        await shopifyService.handleProductWebhook(productData, store.id);
+        
+        console.log(`Successfully processed ${topic} webhook from ${shop}`);
+      } catch (error) {
+        console.error(`Error processing ${topic} webhook from ${shop}:`, error);
+      }
+    },
+    
+    'products/update': async (topic: string, shop: string, body: string, webhookId: string) => {
+      try {
+        console.log(`Received ${topic} webhook from ${shop} (ID: ${webhookId})`);
+        const productData = JSON.parse(body);
+        
+        // Find the store by shop domain
+        const stores = await storage.getUserStores(`shopify_${shop}`);
+        const store = stores.find(s => s.domain === shop);
+        
+        if (!store) {
+          console.error(`Store not found for shop domain: ${shop}`);
+          return;
+        }
+        
+        // Import and use ShopifyService
+        const { shopifyService } = await import('./services/shopifyService');
+        await shopifyService.handleProductWebhook(productData, store.id);
+        
+        console.log(`Successfully processed ${topic} webhook from ${shop}`);
+      } catch (error) {
+        console.error(`Error processing ${topic} webhook from ${shop}:`, error);
+      }
+    },
+    
+    'customers/create': async (topic: string, shop: string, body: string, webhookId: string) => {
+      try {
+        console.log(`Received ${topic} webhook from ${shop} (ID: ${webhookId})`);
+        const customerData = JSON.parse(body);
+        
+        // Find the store by shop domain
+        const stores = await storage.getUserStores(`shopify_${shop}`);
+        const store = stores.find(s => s.domain === shop);
+        
+        if (!store) {
+          console.error(`Store not found for shop domain: ${shop}`);
+          return;
+        }
+        
+        // Import and use ShopifyService
+        const { shopifyService } = await import('./services/shopifyService');
+        await shopifyService.handleCustomerWebhook(customerData, store.id);
+        
+        console.log(`Successfully processed ${topic} webhook from ${shop}`);
+      } catch (error) {
+        console.error(`Error processing ${topic} webhook from ${shop}:`, error);
+      }
+    },
+  };
+
   // Webhook endpoint
-  app.post(shopify.config.webhooks.path, shopify.processWebhooks({ webhookHandlers: {} }));
+  app.post(shopify.config.webhooks.path, shopify.processWebhooks({ webhookHandlers }));
   
   // Protected routes middleware
   app.use("/api/*", shopify.validateAuthenticatedSession());
