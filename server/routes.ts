@@ -30,27 +30,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Flexible authentication that allows demo mode
   const authenticateOrDemo = (req: any, res: any, next: any) => {
-    // Try to authenticate normally
-    if (useShopifyAuth) {
-      authenticateShopify(req, res, (err: any) => {
-        if (err || !req.shopifyUser) {
-          // If authentication fails, allow demo mode access
-          req.isDemoMode = true;
-          next();
-        } else {
-          next();
-        }
-      });
+    // Check if user is authenticated
+    const userId = getUserId(req);
+    
+    // If authenticated normally, proceed
+    if (userId) {
+      next();
     } else {
-      isAuthenticated(req, res, (err: any) => {
-        if (err || !req.user) {
-          // If authentication fails, allow demo mode access
-          req.isDemoMode = true;
-          next();
-        } else {
-          next();
-        }
-      });
+      // Not authenticated - enable demo mode
+      req.isDemoMode = true;
+      req.user = { 
+        claims: { sub: 'demo_user' },
+        isDemoMode: true 
+      };
+      next();
     }
   };
   
