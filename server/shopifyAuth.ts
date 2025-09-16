@@ -17,7 +17,6 @@ function initializeShopify() {
         hostScheme: 'https',
         hostName: process.env.HOST?.replace('https://', '').replace('http://', '') || '',
         apiVersion: ApiVersion.October24,
-        restResources: import("@shopify/shopify-api/rest/admin/2024-10"),
         isEmbeddedApp: true,  // Critical for embedded apps
       },
       auth: {
