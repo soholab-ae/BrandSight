@@ -46,44 +46,22 @@ function OnboardingRouter() {
     );
   }
 
-  // Authenticated user routing based on onboarding state
-  const hasStores = stores && Array.isArray(stores) && stores.length > 0;
-  const hasError = storesError;
-
+  // Always show dashboard with demo data - easy-access demo mode
+  // Users can optionally connect a real store, but demo data is always available
+  
   return (
     <Switch>
-      {/* Allow direct access to specific onboarding pages */}
+      {/* Allow direct access to onboarding pages if users want to connect a store */}
       <Route path="/welcome" component={Welcome} />
       <Route path="/setup" component={Setup} />
       <Route path="/sync" component={Sync} />
       
-      {/* Main route logic - redirect based on user state */}
-      <Route path="/">
-        {() => {
-          // Skip welcome screen if there's an error - go straight to setup
-          if (hasError) {
-            return <Setup />;
-          }
-          
-          // If user has no stores, go straight to setup (skip welcome)
-          if (!hasStores) {
-            return <Setup />;
-          }
-          
-          // User has stores - show dashboard
-          return <Dashboard />;
-        }}
-      </Route>
+      {/* Always show dashboard with demo data */}
+      <Route path="/" component={Dashboard} />
+      <Route path="/vendor/:vendorSlug" component={Dashboard} />
       
-      {/* Fallback for any other route when authenticated */}
-      <Route>
-        {() => {
-          if (hasError || !hasStores) {
-            return <Setup />;
-          }
-          return <Dashboard />;
-        }}
-      </Route>
+      {/* Fallback - show dashboard */}
+      <Route component={Dashboard} />
     </Switch>
   );
 }

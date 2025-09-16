@@ -25,6 +25,15 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, gte, lte, desc, sql, asc } from "drizzle-orm";
+import { 
+  demoStore, 
+  demoVendors, 
+  demoProducts, 
+  demoOrders, 
+  getDemoOrderLineItems,
+  demoVendorAnalytics,
+  isDemoMode 
+} from './demoData';
 
 export interface IStorage {
   // User operations (required for auth)
@@ -85,6 +94,10 @@ export class DatabaseStorage implements IStorage {
 
   // Store operations
   async getUserStores(userId: string): Promise<Store[]> {
+    // Return demo store for demo mode
+    if (isDemoMode(userId)) {
+      return [demoStore];
+    }
     return await db.select().from(stores).where(eq(stores.userId, userId));
   }
 
@@ -99,6 +112,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getStoreByDomain(domain: string): Promise<Store | undefined> {
+    // Return demo store for demo domain
+    if (domain === 'demo-store.myshopify.com') {
+      return demoStore;
+    }
     const [store] = await db.select().from(stores).where(eq(stores.domain, domain));
     return store;
   }
@@ -114,6 +131,10 @@ export class DatabaseStorage implements IStorage {
 
   // Vendor operations
   async getStoreVendors(storeId: string): Promise<Vendor[]> {
+    // Return demo vendors for demo store
+    if (storeId === 'demo_store_1') {
+      return demoVendors;
+    }
     return await db.select().from(vendors).where(eq(vendors.storeId, storeId));
   }
 
@@ -123,6 +144,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getVendor(id: string): Promise<Vendor | undefined> {
+    // Return demo vendor if it matches
+    if (id.startsWith('vendor_')) {
+      return demoVendors.find(v => v.id === id);
+    }
     const [vendor] = await db.select().from(vendors).where(eq(vendors.id, id));
     return vendor;
   }
@@ -144,6 +169,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getVendorProducts(vendorId: string): Promise<Product[]> {
+    // Return demo products for demo vendor
+    if (vendorId.startsWith('vendor_')) {
+      return demoProducts.filter(p => p.vendorId === vendorId);
+    }
     return await db.select().from(products).where(eq(products.vendorId, vendorId));
   }
 
@@ -191,6 +220,24 @@ export class DatabaseStorage implements IStorage {
     startDate?: Date,
     endDate?: Date
   ): Promise<VendorAnalytics[]> {
+    // Return demo analytics for demo store
+    if (storeId === 'demo_store_1') {
+      let analytics = demoVendorAnalytics;
+      
+      if (vendorId) {
+        analytics = analytics.filter(a => a.vendorId === vendorId);
+      }
+      
+      if (startDate && endDate) {
+        analytics = analytics.filter(a => {
+          const date = a.date;
+          return date >= startDate && date <= endDate;
+        });
+      }
+      
+      return analytics;
+    }
+    
     let query = db.select().from(vendorAnalytics).where(eq(vendorAnalytics.storeId, storeId));
     
     const conditions = [eq(vendorAnalytics.storeId, storeId)];
@@ -220,6 +267,49 @@ export class DatabaseStorage implements IStorage {
     startDate?: Date,
     endDate?: Date
   ): Promise<any> {
+    // Calculate summary from demo analytics for demo store
+    if (storeId === 'demo_store_1') {
+      let analytics = demoVendorAnalytics;
+      
+      if (vendorId) {
+        analytics = analytics.filter(a => a.vendorId === vendorId);
+      }
+      
+      if (startDate && endDate) {
+        analytics = analytics.filter(a => {
+          const date = a.date;
+          return date >= startDate && date <= endDate;
+        });
+      }
+      
+      if (analytics.length === 0) {
+        return {
+          totalRevenue: 0,
+          totalOrders: 0,
+          totalVisitors: 0,
+          totalConversions: 0,
+          avgAOV: 0,
+          avgConversionRate: 0
+        };
+      }
+      
+      const totalRevenue = analytics.reduce((sum, a) => sum + parseFloat(a.revenue || "0"), 0);
+      const totalOrders = analytics.reduce((sum, a) => sum + (a.orders || 0), 0);
+      const totalVisitors = analytics.reduce((sum, a) => sum + (a.visitors || 0), 0);
+      const totalConversions = analytics.reduce((sum, a) => sum + (a.conversions || 0), 0);
+      const avgAOV = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+      const avgConversionRate = totalVisitors > 0 ? totalConversions / totalVisitors : 0;
+      
+      return {
+        totalRevenue,
+        totalOrders,
+        totalVisitors,
+        totalConversions,
+        avgAOV,
+        avgConversionRate
+      };
+    }
+    
     const conditions = [eq(vendorAnalytics.storeId, storeId)];
     
     if (vendorId) {
@@ -254,6 +344,35 @@ export class DatabaseStorage implements IStorage {
     vendorId?: string,
     limit: number = 10
   ): Promise<any[]> {
+    // Calculate top products from demo data
+    if (storeId === 'demo_store_1') {
+      const productStats = new Map<string, any>();
+      
+      demoOrders.forEach(order => {
+        const lineItems = getDemoOrderLineItems(order.id);
+        lineItems.forEach(item => {
+          if (!vendorId || item.vendorId === vendorId) {
+            const key = item.productId!;
+            const existing = productStats.get(key) || {
+              productId: item.productId,
+              title: item.title,
+              vendor: item.vendor,
+              totalRevenue: 0,
+              totalQuantity: 0
+            };
+            
+            existing.totalRevenue += parseFloat(item.price || "0") * (item.quantity || 1);
+            existing.totalQuantity += item.quantity || 1;
+            productStats.set(key, existing);
+          }
+        });
+      });
+      
+      return Array.from(productStats.values())
+        .sort((a, b) => b.totalRevenue - a.totalRevenue)
+        .slice(0, limit);
+    }
+    
     const conditions = [eq(orders.storeId, storeId)];
     
     if (vendorId) {
