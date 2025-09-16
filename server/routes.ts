@@ -25,8 +25,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     await setupShopifyWebhooks(app);
   }
 
-  // Unified authentication middleware
+  // Unified authentication middleware with demo mode support
   const authenticate = useShopifyAuth ? authenticateShopify : isAuthenticated;
+  
+  // Flexible authentication that allows demo mode
+  const authenticateOrDemo = (req: any, res: any, next: any) => {
+    // Try to authenticate normally
+    if (useShopifyAuth) {
+      authenticateShopify(req, res, (err: any) => {
+        if (err || !req.shopifyUser) {
+          // If authentication fails, allow demo mode access
+          req.isDemoMode = true;
+          next();
+        } else {
+          next();
+        }
+      });
+    } else {
+      isAuthenticated(req, res, (err: any) => {
+        if (err || !req.user) {
+          // If authentication fails, allow demo mode access
+          req.isDemoMode = true;
+          next();
+        } else {
+          next();
+        }
+      });
+    }
+  };
   
   // Helper to get user ID from either auth system
   const getUserId = (req: any) => {
@@ -38,16 +64,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   };
 
-  // Helper to get user's first store
+  // Helper to get user's first store (includes demo store for demo mode)
   const getUserCurrentStore = async (req: any) => {
     const userId = getUserId(req);
     if (!userId) {
-      throw new Error("No user ID found");
+      // If no user ID, return demo store for easy-access demo
+      return {
+        id: "demo_store_1",
+        userId: "demo_user",
+        name: "Demo Store",
+        domain: "demo-store.myshopify.com",
+        accessToken: "demo_token",
+        isActive: true,
+        lastSyncAt: new Date(),
+        createdAt: new Date('2024-01-01')
+      };
     }
     
     const stores = await storage.getUserStores(userId);
     if (stores.length === 0) {
-      throw new Error("No stores found for user");
+      // Return demo store if user has no stores connected
+      return {
+        id: "demo_store_1",
+        userId: userId,
+        name: "Demo Store",
+        domain: "demo-store.myshopify.com",
+        accessToken: "demo_token",
+        isActive: true,
+        lastSyncAt: new Date(),
+        createdAt: new Date('2024-01-01')
+      };
     }
     
     return stores[0];
@@ -344,7 +390,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Current store routes (automatically use user's first store)
-  app.get('/api/stores/current/vendors', authenticate, async (req: any, res) => {
+  app.get('/api/stores/current/vendors', authenticateOrDemo, async (req: any, res) => {
     try {
       const store = await getUserCurrentStore(req);
       const vendors = await storage.getStoreVendors(store.id);
@@ -358,7 +404,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/stores/current/analytics/summary', authenticate, async (req: any, res) => {
+  app.get('/api/stores/current/analytics/summary', authenticateOrDemo, async (req: any, res) => {
     try {
       const store = await getUserCurrentStore(req);
       const { vendorId, startDate, endDate } = req.query;
@@ -383,7 +429,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/stores/current/products/top', authenticate, async (req: any, res) => {
+  app.get('/api/stores/current/products/top', authenticateOrDemo, async (req: any, res) => {
     try {
       const store = await getUserCurrentStore(req);
       const { vendorId, limit } = req.query;
@@ -404,7 +450,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/stores/current/pages/top', authenticate, async (req: any, res) => {
+  app.get('/api/stores/current/pages/top', authenticateOrDemo, async (req: any, res) => {
     try {
       const store = await getUserCurrentStore(req);
       const { vendorId, limit } = req.query;

@@ -11,11 +11,21 @@ import TopProducts from "@/components/TopProducts";
 import VendorComparisonTable from "@/components/VendorComparisonTable";
 import LandingPagesAnalysis from "@/components/LandingPagesAnalysis";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Download } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { RefreshCw, Download, InfoIcon } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 
 export default function Dashboard() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading } = useAuth();
+  
+  // Check if using demo data
+  const { data: stores } = useQuery({
+    queryKey: ['/api/stores'],
+    enabled: isAuthenticated
+  });
+  
+  const isDemoMode = !stores || !Array.isArray(stores) || stores.length === 0 || stores[0]?.id === 'demo_store_1';
   
   // Date range state for filtering analytics
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
@@ -64,6 +74,19 @@ export default function Dashboard() {
         <Sidebar />
         
         <main className="flex-1 p-6">
+          {/* Demo Mode Alert */}
+          {isDemoMode && (
+            <Alert className="mb-6 bg-brand-50 border-brand-200">
+              <InfoIcon className="h-4 w-4 text-brand-600" />
+              <AlertDescription className="text-brand-800">
+                <strong>Demo Mode:</strong> You're viewing sample analytics data for popular athletic brands. 
+                <a href="/setup" className="underline ml-1 text-brand-700 hover:text-brand-900">
+                  Connect your Shopify store
+                </a> to see your real vendor analytics.
+              </AlertDescription>
+            </Alert>
+          )}
+          
           {/* Enhanced Page Header */}
           <div className="mb-8">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
