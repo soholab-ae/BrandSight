@@ -147,7 +147,7 @@ export default function Dashboard() {
           </div>
 
           {/* Vendor Comparison Table */}
-          <VendorComparisonTable />
+          <VendorComparisonTable dateRange={dateRange} />
 
           {/* Landing Pages Analysis */}
           <LandingPagesAnalysis />
