@@ -1,6 +1,6 @@
 # Overview
 
-Vendorlytics is a comprehensive Shopify analytics application that provides deep vendor-specific insights that standard Shopify analytics don't offer. The app allows store owners to analyze performance metrics by brand and vendor, including Average Order Value (AOV), conversion rates, visitor metrics, and revenue analytics across different product vendors. Users can connect their Shopify stores to sync product and order data, then view detailed dashboards with vendor comparisons, top products, landing page analytics, and customizable date ranges.
+BrandSight is a comprehensive Shopify analytics application that provides deep brand-specific insights that standard Shopify analytics don't offer. The app allows store owners to analyze performance metrics by brand and vendor, including Average Order Value (AOV), conversion rates, visitor metrics, and revenue analytics across different product brands. Users can connect their Shopify stores to sync product and order data, then view detailed dashboards with brand comparisons, top products, landing page analytics, and customizable date ranges.
 
 # User Preferences
 

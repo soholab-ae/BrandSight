@@ -17,7 +17,7 @@ export default function Landing() {
               <div className="w-8 h-8 bg-shopify-500 rounded-lg flex items-center justify-center">
                 <BarChart3 className="text-white" size={20} />
               </div>
-              <h1 className="text-xl font-bold text-gray-900">Vendorlytics</h1>
+              <h1 className="text-xl font-bold text-gray-900">BrandSight</h1>
             </div>
             <Button 
               onClick={handleLogin}
@@ -34,11 +34,11 @@ export default function Landing() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
         <div className="text-center">
           <h2 className="text-4xl font-bold text-gray-900 mb-6">
-            Deep Vendor Analytics for Your Shopify Store
+            Deep Brand Analytics for Your Shopify Store
           </h2>
           <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
             Get detailed insights by brand and vendor that Shopify's native analytics don't provide. 
-            Track AOV, conversion rates, visitor metrics, and more for each vendor in your store.
+            Track AOV, conversion rates, visitor metrics, and more for each brand in your store.
           </p>
           <Button 
             onClick={handleLogin}
@@ -59,7 +59,7 @@ export default function Landing() {
               <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-4">
                 <TrendingUp className="text-blue-600" size={24} />
               </div>
-              <CardTitle className="text-lg">AOV by Vendor</CardTitle>
+              <CardTitle className="text-lg">AOV by Brand</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-gray-600 text-sm">
@@ -116,10 +116,10 @@ export default function Landing() {
       <div className="bg-shopify-600 text-white py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h3 className="text-3xl font-bold mb-4">
-            Ready to unlock vendor-specific insights?
+            Ready to unlock brand-specific insights?
           </h3>
           <p className="text-xl mb-8 text-shopify-100">
-            Connect your Shopify store in minutes and start analyzing your vendor performance.
+            Connect your Shopify store in minutes and start analyzing your brand performance.
           </p>
           <Button 
             onClick={handleLogin}
