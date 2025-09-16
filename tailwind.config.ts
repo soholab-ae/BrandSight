@@ -61,12 +61,12 @@ export default {
           border: "var(--sidebar-border)",
           ring: "var(--sidebar-ring)",
         },
-        shopify: {
-          50: "var(--shopify-50)",
-          100: "var(--shopify-100)",
-          500: "var(--shopify-500)",
-          600: "var(--shopify-600)",
-          700: "var(--shopify-700)",
+        brand: {
+          50: "var(--brand-50)",
+          100: "var(--brand-100)",
+          500: "var(--brand-500)",
+          600: "var(--brand-600)",
+          700: "var(--brand-700)",
         },
       },
       fontFamily: {
