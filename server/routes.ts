@@ -33,6 +33,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   };
 
+  // Helper to get user's first store
+  const getUserCurrentStore = async (req: any) => {
+    const userId = getUserId(req);
+    if (!userId) {
+      throw new Error("No user ID found");
+    }
+    
+    const stores = await storage.getUserStores(userId);
+    if (stores.length === 0) {
+      throw new Error("No stores found for user");
+    }
+    
+    return stores[0];
+  };
+
   // Auth routes
   app.get('/api/auth/user', authenticate, async (req: any, res) => {
     try {
@@ -93,6 +108,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error creating store:", error);
       res.status(500).json({ message: "Failed to create store" });
+    }
+  });
+
+  // Current store routes (automatically use user's first store)
+  app.get('/api/stores/current/vendors', authenticate, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const vendors = await storage.getStoreVendors(store.id);
+      res.json(vendors);
+    } catch (error) {
+      console.error("Error fetching current store vendors:", error);
+      if (error.message === "No stores found for user") {
+        return res.status(404).json({ message: "No stores found for user" });
+      }
+      res.status(500).json({ message: "Failed to fetch vendors" });
+    }
+  });
+
+  app.get('/api/stores/current/analytics/summary', authenticate, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const { vendorId, startDate, endDate } = req.query;
+      
+      const start = startDate ? new Date(startDate as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const end = endDate ? new Date(endDate as string) : new Date();
+      
+      const summary = await storage.getVendorSummary(
+        store.id,
+        vendorId as string,
+        start,
+        end
+      );
+      
+      res.json(summary);
+    } catch (error) {
+      console.error("Error fetching current store analytics summary:", error);
+      if (error.message === "No stores found for user") {
+        return res.status(404).json({ message: "No stores found for user" });
+      }
+      res.status(500).json({ message: "Failed to fetch analytics summary" });
+    }
+  });
+
+  app.get('/api/stores/current/products/top', authenticate, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const { vendorId, limit } = req.query;
+      
+      const topProducts = await storage.getTopProducts(
+        store.id,
+        vendorId as string,
+        limit ? parseInt(limit as string) : 10
+      );
+      
+      res.json(topProducts);
+    } catch (error) {
+      console.error("Error fetching current store top products:", error);
+      if (error.message === "No stores found for user") {
+        return res.status(404).json({ message: "No stores found for user" });
+      }
+      res.status(500).json({ message: "Failed to fetch top products" });
+    }
+  });
+
+  app.get('/api/stores/current/pages/top', authenticate, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const { vendorId, limit } = req.query;
+      
+      const topPages = await storage.getTopLandingPages(
+        store.id,
+        vendorId as string,
+        limit ? parseInt(limit as string) : 10
+      );
+      
+      res.json(topPages);
+    } catch (error) {
+      console.error("Error fetching current store top pages:", error);
+      if (error.message === "No stores found for user") {
+        return res.status(404).json({ message: "No stores found for user" });
+      }
+      res.status(500).json({ message: "Failed to fetch top pages" });
     }
   });
 
