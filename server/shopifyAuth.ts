@@ -630,6 +630,16 @@ export async function setupShopifyAuth(app: Express) {
       return next();
     }
     
+    // If we have a default shop domain configured, also skip validation for user and stores endpoints
+    // This allows the app to work without OAuth for already-installed apps
+    if (process.env.DEFAULT_SHOP_DOMAIN) {
+      if (req.path === '/api/auth/user' || 
+          req.path === '/api/stores' ||
+          req.path.startsWith('/api/stores/')) {
+        return next();
+      }
+    }
+    
     // Apply validation to other API routes
     if (req.path.startsWith('/api/')) {
       return shopifyInstance.validateAuthenticatedSession()(req, res, next);

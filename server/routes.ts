@@ -178,39 +178,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Auth routes
-  app.get('/api/auth/user', authenticate, async (req: any, res) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        return res.status(401).json({ message: "No user ID found" });
+  app.get('/api/auth/user', async (req: any, res, next) => {
+    // If we have a default shop domain, create/return a default user
+    if (process.env.DEFAULT_SHOP_DOMAIN && !req.user && !req.shopifyUser) {
+      try {
+        const shopDomain = process.env.DEFAULT_SHOP_DOMAIN;
+        const userId = `shopify_${shopDomain.replace('.myshopify.com', '')}`;
+        
+        // Create or get the default user
+        const user = await storage.upsertUser({
+          id: userId,
+          email: `admin@${shopDomain}`,
+          firstName: 'Store',
+          lastName: 'Admin',
+          profileImageUrl: null
+        });
+        
+        return res.json(user);
+      } catch (error) {
+        console.error("Error creating default user:", error);
       }
-      
-      const user = await storage.getUser(userId);
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-      
-      res.json(user);
-    } catch (error) {
-      console.error("Error fetching user:", error);
-      res.status(500).json({ message: "Failed to fetch user" });
     }
+    
+    // Otherwise, use normal authentication
+    authenticate(req, res, async () => {
+      try {
+        const userId = getUserId(req);
+        if (!userId) {
+          return res.status(401).json({ message: "No user ID found" });
+        }
+        
+        const user = await storage.getUser(userId);
+        if (!user) {
+          return res.status(404).json({ message: "User not found" });
+        }
+        
+        res.json(user);
+      } catch (error) {
+        console.error("Error fetching user:", error);
+        res.status(500).json({ message: "Failed to fetch user" });
+      }
+    });
   });
 
   // Store routes
-  app.get('/api/stores', authenticate, async (req: any, res) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        return res.status(401).json({ message: "No user ID found" });
+  app.get('/api/stores', async (req: any, res, next) => {
+    // If we have a default shop domain and no auth, return empty array or default stores
+    if (process.env.DEFAULT_SHOP_DOMAIN && !req.user && !req.shopifyUser) {
+      try {
+        const shopDomain = process.env.DEFAULT_SHOP_DOMAIN;
+        const userId = `shopify_${shopDomain.replace('.myshopify.com', '')}`;
+        
+        const stores = await storage.getUserStores(userId);
+        return res.json(stores);
+      } catch (error) {
+        console.error("Error fetching default stores:", error);
+        return res.json([]); // Return empty array if no stores yet
       }
-      
-      const stores = await storage.getUserStores(userId);
-      res.json(stores);
-    } catch (error) {
-      console.error("Error fetching stores:", error);
-      res.status(500).json({ message: "Failed to fetch stores" });
     }
+    
+    // Otherwise, use normal authentication
+    authenticate(req, res, async () => {
+      try {
+        const userId = getUserId(req);
+        if (!userId) {
+          return res.status(401).json({ message: "No user ID found" });
+        }
+        
+        const stores = await storage.getUserStores(userId);
+        res.json(stores);
+      } catch (error) {
+        console.error("Error fetching stores:", error);
+        res.status(500).json({ message: "Failed to fetch stores" });
+      }
+    });
   });
 
   // Manual store setup endpoint - for already installed apps
