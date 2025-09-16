@@ -6,14 +6,46 @@ import { shopifyService } from "./services/shopifyService";
 import { insertStoreSchema } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Auth middleware
-  await setupAuth(app);
+  // Auth middleware - support both Replit and Shopify auth
+  const useShopifyAuth = process.env.USE_SHOPIFY_AUTH === 'true';
+  
+  let authenticateShopify: any;
+  
+  if (useShopifyAuth) {
+    // Dynamically import Shopify auth only when needed
+    const { setupShopifyAuth, authenticateShopify: shopifyAuthMiddleware } = await import("./shopifyAuth");
+    authenticateShopify = shopifyAuthMiddleware;
+    await setupShopifyAuth(app);
+  } else {
+    await setupAuth(app);
+  }
+
+  // Unified authentication middleware
+  const authenticate = useShopifyAuth ? authenticateShopify : isAuthenticated;
+  
+  // Helper to get user ID from either auth system
+  const getUserId = (req: any) => {
+    if (useShopifyAuth) {
+      const rawId = req.shopifyUser?.id || req.shopifySession?.shop;
+      return rawId ? `shopify_${rawId}` : null;
+    } else {
+      return req.user?.claims?.sub;
+    }
+  };
 
   // Auth routes
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+  app.get('/api/auth/user', authenticate, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "No user ID found" });
+      }
+      
       const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
       res.json(user);
     } catch (error) {
       console.error("Error fetching user:", error);
@@ -22,9 +54,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Store routes
-  app.get('/api/stores', isAuthenticated, async (req: any, res) => {
+  app.get('/api/stores', authenticate, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "No user ID found" });
+      }
+      
       const stores = await storage.getUserStores(userId);
       res.json(stores);
     } catch (error) {
@@ -33,9 +69,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/stores', isAuthenticated, async (req: any, res) => {
+  app.post('/api/stores', authenticate, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "No user ID found" });
+      }
+      
       const storeData = insertStoreSchema.parse({ ...req.body, userId });
       
       const store = await storage.createStore(storeData);
@@ -57,7 +97,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Vendor routes
-  app.get('/api/stores/:storeId/vendors', isAuthenticated, async (req: any, res) => {
+  app.get('/api/stores/:storeId/vendors', authenticate, async (req: any, res) => {
     try {
       const { storeId } = req.params;
       const vendors = await storage.getStoreVendors(storeId);
@@ -69,7 +109,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Analytics routes
-  app.get('/api/stores/:storeId/analytics', isAuthenticated, async (req: any, res) => {
+  app.get('/api/stores/:storeId/analytics', authenticate, async (req: any, res) => {
     try {
       const { storeId } = req.params;
       const { vendorId, startDate, endDate } = req.query;
@@ -91,7 +131,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/stores/:storeId/analytics/summary', isAuthenticated, async (req: any, res) => {
+  app.get('/api/stores/:storeId/analytics/summary', authenticate, async (req: any, res) => {
     try {
       const { storeId } = req.params;
       const { vendorId, startDate, endDate } = req.query;
@@ -113,7 +153,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/stores/:storeId/products/top', isAuthenticated, async (req: any, res) => {
+  app.get('/api/stores/:storeId/products/top', authenticate, async (req: any, res) => {
     try {
       const { storeId } = req.params;
       const { vendorId, limit } = req.query;
@@ -131,7 +171,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/stores/:storeId/pages/top', isAuthenticated, async (req: any, res) => {
+  app.get('/api/stores/:storeId/pages/top', authenticate, async (req: any, res) => {
     try {
       const { storeId } = req.params;
       const { vendorId, limit } = req.query;
@@ -150,7 +190,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Sync routes
-  app.post('/api/stores/:storeId/sync', isAuthenticated, async (req: any, res) => {
+  app.post('/api/stores/:storeId/sync', authenticate, async (req: any, res) => {
     try {
       const { storeId } = req.params;
       const store = await storage.getStore(storeId);
