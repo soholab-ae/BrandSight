@@ -56,6 +56,8 @@ export interface IStorage {
   getVendorSummary(storeId: string, vendorId?: string, startDate?: Date, endDate?: Date): Promise<any>;
   getTopProducts(storeId: string, vendorId?: string, limit?: number): Promise<any[]>;
   getTopLandingPages(storeId: string, vendorId?: string, limit?: number): Promise<PageAnalytics[]>;
+  getVendorOrdersInDateRange(storeId: string, vendorId: string, startDate: Date, endDate: Date): Promise<Order[]>;
+  getVendorOrderItemsInDateRange(storeId: string, vendorId: string, startDate: Date, endDate: Date): Promise<OrderLineItem[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -261,6 +263,81 @@ export class DatabaseStorage implements IStorage {
       .where(and(...conditions))
       .orderBy(desc(pageAnalytics.visitors))
       .limit(limit);
+  }
+
+  async getVendorOrdersInDateRange(
+    storeId: string,
+    vendorId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<Order[]> {
+    const result = await db
+      .select({
+        id: orders.id,
+        storeId: orders.storeId,
+        orderNumber: orders.orderNumber,
+        totalPrice: orders.totalPrice,
+        subtotalPrice: orders.subtotalPrice,
+        totalTax: orders.totalTax,
+        currency: orders.currency,
+        financialStatus: orders.financialStatus,
+        fulfillmentStatus: orders.fulfillmentStatus,
+        customerEmail: orders.customerEmail,
+        customerId: orders.customerId,
+        landingPage: orders.landingPage,
+        referringSite: orders.referringSite,
+        processedAt: orders.processedAt,
+        createdAt: orders.createdAt,
+      })
+      .from(orders)
+      .innerJoin(orderLineItems, eq(orders.id, orderLineItems.orderId))
+      .where(
+        and(
+          eq(orders.storeId, storeId),
+          eq(orderLineItems.vendorId, vendorId),
+          gte(orders.processedAt, startDate),
+          lte(orders.processedAt, endDate),
+          eq(orders.financialStatus, 'paid')
+        )
+      )
+      .groupBy(orders.id)
+      .orderBy(desc(orders.processedAt));
+    
+    return result;
+  }
+
+  async getVendorOrderItemsInDateRange(
+    storeId: string,
+    vendorId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<OrderLineItem[]> {
+    const result = await db
+      .select({
+        id: orderLineItems.id,
+        orderId: orderLineItems.orderId,
+        productId: orderLineItems.productId,
+        vendorId: orderLineItems.vendorId,
+        title: orderLineItems.title,
+        vendor: orderLineItems.vendor,
+        quantity: orderLineItems.quantity,
+        price: orderLineItems.price,
+        totalDiscount: orderLineItems.totalDiscount,
+      })
+      .from(orderLineItems)
+      .innerJoin(orders, eq(orders.id, orderLineItems.orderId))
+      .where(
+        and(
+          eq(orders.storeId, storeId),
+          eq(orderLineItems.vendorId, vendorId),
+          gte(orders.processedAt, startDate),
+          lte(orders.processedAt, endDate),
+          eq(orders.financialStatus, 'paid')
+        )
+      )
+      .orderBy(desc(orders.processedAt));
+    
+    return result;
   }
 }
 
