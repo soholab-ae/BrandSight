@@ -248,7 +248,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(vendors);
     } catch (error) {
       console.error("Error fetching current store vendors:", error);
-      if (error.message === "No stores found for user") {
+      if (error instanceof Error && error.message === "No stores found for user") {
         return res.status(404).json({ message: "No stores found for user" });
       }
       res.status(500).json({ message: "Failed to fetch vendors" });
@@ -273,7 +273,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(summary);
     } catch (error) {
       console.error("Error fetching current store analytics summary:", error);
-      if (error.message === "No stores found for user") {
+      if (error instanceof Error && error.message === "No stores found for user") {
         return res.status(404).json({ message: "No stores found for user" });
       }
       res.status(500).json({ message: "Failed to fetch analytics summary" });
@@ -294,7 +294,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(topProducts);
     } catch (error) {
       console.error("Error fetching current store top products:", error);
-      if (error.message === "No stores found for user") {
+      if (error instanceof Error && error.message === "No stores found for user") {
         return res.status(404).json({ message: "No stores found for user" });
       }
       res.status(500).json({ message: "Failed to fetch top products" });
@@ -315,7 +315,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(topPages);
     } catch (error) {
       console.error("Error fetching current store top pages:", error);
-      if (error.message === "No stores found for user") {
+      if (error instanceof Error && error.message === "No stores found for user") {
         return res.status(404).json({ message: "No stores found for user" });
       }
       res.status(500).json({ message: "Failed to fetch top pages" });
