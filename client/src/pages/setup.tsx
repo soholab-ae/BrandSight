@@ -57,9 +57,27 @@ export default function Setup() {
     }
   });
 
-  // Store creation mutation
+  // Store creation mutation - use manual setup endpoint to bypass OAuth
   const createStoreMutation = useMutation({
-    mutationFn: (data: SetupFormData) => apiRequest('POST', '/api/stores', data),
+    mutationFn: async (data: SetupFormData) => {
+      // First try manual setup
+      try {
+        const response = await fetch('/api/stores/manual-setup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accessToken: data.accessToken })
+        });
+        
+        if (response.ok) {
+          return await response.json();
+        }
+      } catch (error) {
+        console.error('Manual setup failed, trying authenticated route:', error);
+      }
+      
+      // Fallback to authenticated route
+      return apiRequest('POST', '/api/stores', data);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/stores'] });
       toast({
