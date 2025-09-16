@@ -4,7 +4,16 @@ import { BarChart3, TrendingUp, Users, ShoppingBag } from "lucide-react";
 
 export default function Landing() {
   const handleLogin = () => {
-    window.location.href = "/api/login";
+    // Check if we have a shop parameter in the URL (from Shopify admin)
+    const urlParams = new URLSearchParams(window.location.search);
+    const shop = urlParams.get('shop');
+    
+    if (shop) {
+      // If we have a shop parameter, pass it to the login route
+      window.location.href = `/api/login?shop=${shop}`;
+    } else {
+      window.location.href = "/api/login";
+    }
   };
 
   return (
