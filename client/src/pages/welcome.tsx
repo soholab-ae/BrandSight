@@ -14,7 +14,7 @@ export default function Welcome() {
   const features = [
     {
       icon: TrendingUp,
-      title: "AOV by Vendor",
+      title: "AOV by Brand",
       description: "Track average order values for each brand to optimize pricing strategies.",
       color: "bg-blue-100 text-blue-600"
     },
@@ -48,7 +48,7 @@ export default function Welcome() {
               <div className="w-8 h-8 bg-shopify-500 rounded-lg flex items-center justify-center">
                 <BarChart3 className="text-white" size={20} />
               </div>
-              <h1 className="text-xl font-bold text-gray-900">Vendorlytics</h1>
+              <h1 className="text-xl font-bold text-gray-900">BrandSight</h1>
             </div>
             <div className="flex items-center space-x-3">
               <Badge variant="secondary" className="bg-green-100 text-green-700" data-testid="badge-connection-status">
@@ -80,11 +80,11 @@ export default function Welcome() {
             <CheckCircle className="w-8 h-8 text-green-600" />
           </div>
           <h1 className="text-4xl font-bold text-gray-900 mb-4" data-testid="heading-welcome">
-            Welcome to Vendorlytics!
+            Welcome to BrandSight!
           </h1>
           <p className="text-xl text-gray-600 mb-6" data-testid="text-welcome-description">
             You've successfully connected your account. Now let's set up your store analytics 
-            to unlock deep vendor insights that Shopify's native analytics don't provide.
+            to unlock deep brand insights that Shopify's native analytics don't provide.
           </p>
           <Badge variant="outline" className="mb-8" data-testid="badge-setup-status">
             <Zap className="w-4 h-4 mr-2" />

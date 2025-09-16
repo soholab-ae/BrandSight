@@ -21,7 +21,7 @@ export default function AppHeader() {
                 <BarChart3 className="text-white" size={16} />
               </div>
               <h1 className="text-xl font-bold text-gray-900" data-testid="text-app-title">
-                Vendorlytics
+                BrandSight
               </h1>
             </div>
             <div className="hidden md:flex items-center space-x-2 text-sm text-gray-600">
