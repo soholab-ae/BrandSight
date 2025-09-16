@@ -6,9 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Download, Filter, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Download, Filter, Search, ArrowUpDown, ArrowUp, ArrowDown, FileSpreadsheet } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import VendorDetailModal from "@/components/VendorDetailModal";
+import { exportToCSV, exportToExcel, VendorExportData } from "@/utils/exportUtils";
 
 interface VendorMetrics {
   id: string;
@@ -21,7 +22,16 @@ interface VendorMetrics {
   growth: number;
 }
 
-export default function VendorComparisonTable() {
+interface DateRange {
+  from?: Date;
+  to?: Date;
+}
+
+interface VendorComparisonTableProps {
+  dateRange?: DateRange;
+}
+
+export default function VendorComparisonTable({ dateRange }: VendorComparisonTableProps) {
   const { data: vendors, isLoading } = useQuery<VendorMetrics[]>({
     queryKey: ["/api/stores/current/vendors"],
   });
@@ -46,6 +56,15 @@ export default function VendorComparisonTable() {
     setSelectedVendor(null);
   };
 
+  const formatDateRange = () => {
+    if (dateRange?.from && dateRange?.to) {
+      const fromDate = dateRange.from.toLocaleDateString();
+      const toDate = dateRange.to.toLocaleDateString();
+      return `${fromDate} - ${toDate}`;
+    }
+    return 'All time';
+  };
+
   const handleExportCSV = () => {
     const exportData: VendorExportData[] = filteredAndSortedVendors.map(vendor => ({
       id: vendor.id,
@@ -58,10 +77,9 @@ export default function VendorComparisonTable() {
       growth: vendor.growth
     }));
 
-    const dateRangeText = `${filteredAndSortedVendors.length} vendors`;
     exportToCSV(exportData, {
       filename: 'vendor-analytics-comparison',
-      dateRange: dateRangeText
+      dateRange: formatDateRange()
     });
   };
 
@@ -77,10 +95,9 @@ export default function VendorComparisonTable() {
       growth: vendor.growth
     }));
 
-    const dateRangeText = `${filteredAndSortedVendors.length} vendors`;
     exportToExcel(exportData, {
       filename: 'vendor-analytics-comparison',
-      dateRange: dateRangeText
+      dateRange: formatDateRange()
     });
   };
 

@@ -39,10 +39,10 @@ export const exportToCSV = (vendors: VendorExportData[], options: ExportOptions 
   const { filename = 'vendor-analytics', dateRange } = options;
   const formattedData = formatVendorDataForExport(vendors, options);
   
-  // Create worksheet
-  const worksheet = XLSX.utils.json_to_sheet(formattedData);
+  // Create empty worksheet first
+  const worksheet = XLSX.utils.aoa_to_sheet([]);
   
-  // Add metadata row at the top if date range is provided
+  // Add metadata and data in correct order
   if (dateRange) {
     XLSX.utils.sheet_add_aoa(worksheet, [
       [`Vendor Analytics Report - ${dateRange}`],
@@ -50,9 +50,15 @@ export const exportToCSV = (vendors: VendorExportData[], options: ExportOptions 
       [] // Empty row before headers
     ], { origin: 'A1' });
     
-    // Shift the data down to accommodate metadata
+    // Add the formatted data starting from A4
     XLSX.utils.sheet_add_json(worksheet, formattedData, { 
       origin: 'A4',
+      skipHeader: false 
+    });
+  } else {
+    // No metadata, add data directly
+    XLSX.utils.sheet_add_json(worksheet, formattedData, { 
+      origin: 'A1',
       skipHeader: false 
     });
   }
@@ -87,10 +93,10 @@ export const exportToExcel = (vendors: VendorExportData[], options: ExportOption
   // Create workbook
   const workbook = XLSX.utils.book_new();
   
-  // Main data worksheet
-  const mainWorksheet = XLSX.utils.json_to_sheet(formattedData);
+  // Create empty worksheet first
+  const mainWorksheet = XLSX.utils.aoa_to_sheet([]);
   
-  // Add metadata and styling
+  // Add metadata and data in correct order
   if (dateRange) {
     XLSX.utils.sheet_add_aoa(mainWorksheet, [
       [`Vendor Analytics Report`],
@@ -103,6 +109,12 @@ export const exportToExcel = (vendors: VendorExportData[], options: ExportOption
     // Add formatted data starting from row 6
     XLSX.utils.sheet_add_json(mainWorksheet, formattedData, { 
       origin: 'A6',
+      skipHeader: false 
+    });
+  } else {
+    // No metadata, add data directly
+    XLSX.utils.sheet_add_json(mainWorksheet, formattedData, { 
+      origin: 'A1',
       skipHeader: false 
     });
   }
@@ -121,15 +133,16 @@ export const exportToExcel = (vendors: VendorExportData[], options: ExportOption
   
   XLSX.utils.book_append_sheet(workbook, mainWorksheet, 'Vendor Analytics');
   
-  // Add summary worksheet
+  // Add summary worksheet with division by zero protection
+  const vendorCount = vendors.length;
   const summaryData = [
     ['Metric', 'Total', 'Average'],
-    ['Total Revenue', vendors.reduce((sum, v) => sum + v.revenue, 0), Math.round(vendors.reduce((sum, v) => sum + v.revenue, 0) / vendors.length)],
-    ['Average AOV', '', Math.round((vendors.reduce((sum, v) => sum + v.aov, 0) / vendors.length) * 100) / 100],
-    ['Average Conversion Rate', '', Math.round((vendors.reduce((sum, v) => sum + v.conversion, 0) / vendors.length) * 100) / 100],
-    ['Total Visitors', vendors.reduce((sum, v) => sum + v.visitors, 0), Math.round(vendors.reduce((sum, v) => sum + v.visitors, 0) / vendors.length)],
-    ['Total Products', vendors.reduce((sum, v) => sum + v.productCount, 0), Math.round(vendors.reduce((sum, v) => sum + v.productCount, 0) / vendors.length)],
-    ['Average Growth Rate', '', Math.round((vendors.reduce((sum, v) => sum + v.growth, 0) / vendors.length) * 100) / 100]
+    ['Total Revenue', vendors.reduce((sum, v) => sum + v.revenue, 0), vendorCount > 0 ? Math.round(vendors.reduce((sum, v) => sum + v.revenue, 0) / vendorCount) : 0],
+    ['Average AOV', '', vendorCount > 0 ? Math.round((vendors.reduce((sum, v) => sum + v.aov, 0) / vendorCount) * 100) / 100 : 0],
+    ['Average Conversion Rate', '', vendorCount > 0 ? Math.round((vendors.reduce((sum, v) => sum + v.conversion, 0) / vendorCount) * 100) / 100 : 0],
+    ['Total Visitors', vendors.reduce((sum, v) => sum + v.visitors, 0), vendorCount > 0 ? Math.round(vendors.reduce((sum, v) => sum + v.visitors, 0) / vendorCount) : 0],
+    ['Total Products', vendors.reduce((sum, v) => sum + v.productCount, 0), vendorCount > 0 ? Math.round(vendors.reduce((sum, v) => sum + v.productCount, 0) / vendorCount) : 0],
+    ['Average Growth Rate', '', vendorCount > 0 ? Math.round((vendors.reduce((sum, v) => sum + v.growth, 0) / vendorCount) * 100) / 100 : 0]
   ];
   
   const summaryWorksheet = XLSX.utils.aoa_to_sheet(summaryData);
