@@ -18,6 +18,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     await setupShopifyAuth(app);
   } else {
     await setupAuth(app);
+    
+    // Even if not using Shopify auth as main auth, we still need webhook handlers
+    // for Shopify integration to work properly
+    const { setupShopifyWebhooks } = await import("./shopifyAuth");
+    await setupShopifyWebhooks(app);
   }
 
   // Unified authentication middleware
