@@ -11,8 +11,14 @@ function initializeShopify() {
   if (!shopify) {
     shopify = shopifyApp({
       api: {
+        apiKey: process.env.SHOPIFY_API_KEY!,
+        apiSecretKey: process.env.SHOPIFY_API_SECRET!,
+        scopes: (process.env.SCOPES || '').split(','),
+        hostScheme: 'https',
+        hostName: process.env.HOST?.replace('https://', '').replace('http://', '') || '',
         apiVersion: ApiVersion.October24,
         restResources: import("@shopify/shopify-api/rest/admin/2024-10"),
+        isEmbeddedApp: true,  // Critical for embedded apps
       },
       auth: {
         path: "/api/auth",
@@ -426,6 +432,35 @@ export async function setupShopifyAuth(app: Express) {
     }
     
     next();
+  });
+  
+  // Login route that redirects to OAuth
+  app.get('/api/login', (req, res) => {
+    const shop = req.query.shop as string;
+    
+    // If shop parameter is provided, redirect to auth with shop
+    if (shop) {
+      res.redirect(`/api/auth?shop=${shop}`);
+    } else {
+      // Check if we're in Shopify admin (embedded app)
+      const referer = req.get('referer') || '';
+      const isEmbedded = referer.includes('admin.shopify.com') || req.query.embedded === '1';
+      
+      if (isEmbedded) {
+        // For embedded apps, need shop parameter
+        res.status(400).send(`
+          <html>
+            <body>
+              <h2>Shop parameter required</h2>
+              <p>Please access this app from your Shopify admin panel.</p>
+            </body>
+          </html>
+        `);
+      } else {
+        // For standalone access, redirect to landing page
+        res.redirect('/');
+      }
+    }
   });
   
   // Auth routes
