@@ -213,6 +213,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Manual store setup endpoint - for already installed apps
+  app.post('/api/stores/manual-setup', async (req: any, res) => {
+    try {
+      // Use the default shop domain from environment
+      const shopDomain = process.env.DEFAULT_SHOP_DOMAIN;
+      const accessToken = req.body.accessToken || process.env.SHOPIFY_ACCESS_TOKEN || '';
+      
+      if (!shopDomain) {
+        return res.status(400).json({ message: "No shop domain configured" });
+      }
+      
+      // Create a default user ID for the store
+      const userId = `shopify_${shopDomain.replace('.myshopify.com', '')}`;
+      
+      // Create or update the user
+      const user = await storage.upsertUser({
+        id: userId,
+        email: `admin@${shopDomain}`,
+        firstName: 'Store',
+        lastName: 'Admin',
+        profileImageUrl: null
+      });
+      
+      // Check if store already exists
+      const existingStore = await storage.getStoreByDomain(shopDomain);
+      
+      if (existingStore) {
+        // Update existing store
+        const updatedStore = await storage.updateStore(existingStore.id, {
+          accessToken: accessToken || existingStore.accessToken,
+          lastSyncAt: new Date()
+        });
+        
+        res.json({ store: updatedStore, message: "Store already exists - updated" });
+      } else {
+        // Create new store
+        const storeData = {
+          userId: user.id,
+          name: shopDomain.replace('.myshopify.com', ''),
+          domain: shopDomain,
+          accessToken: accessToken
+        };
+        
+        const store = await storage.createStore(storeData);
+        
+        // Start initial sync
+        try {
+          await shopifyService.syncProducts(store);
+          await shopifyService.syncOrders(store);
+        } catch (syncError) {
+          console.error("Error during initial sync:", syncError);
+          // Don't fail store creation if sync fails
+        }
+        
+        res.json({ store, message: "Store created successfully" });
+      }
+    } catch (error) {
+      console.error("Error in manual store setup:", error);
+      res.status(500).json({ message: "Failed to setup store manually" });
+    }
+  });
+
   app.post('/api/stores', authenticate, async (req: any, res) => {
     try {
       const userId = getUserId(req);
