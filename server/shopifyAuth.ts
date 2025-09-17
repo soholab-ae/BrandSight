@@ -133,11 +133,18 @@ export const authenticateShopify = async (req: any, res: any, next: any) => {
 // Register webhooks with Shopify (avoiding duplicates)
 async function registerWebhooks(session: any) {
   const webhookTopics = [
+    // Business webhooks
     'orders/create',
-    'orders/updated',
+    'orders/updated', 
     'products/create',
     'products/update',
-    'customers/create'
+    'customers/create',
+    
+    // MANDATORY COMPLIANCE WEBHOOKS FOR APP STORE
+    'customers/data_request',
+    'customers/redact',
+    'shop/redact',
+    'app/uninstalled'
   ];
 
   const webhookUrl = `${process.env.HOST}/api/webhooks`;
