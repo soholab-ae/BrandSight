@@ -1,6 +1,6 @@
-import { useState, useCallback, useMemo } from "react";
-import { FixedSizeList as List } from "react-window";
-import InfiniteLoader from "react-window-infinite-loader";
+import { useState, useCallback, useMemo, useEffect } from "react";
+import { List } from "react-window";
+import { InfiniteLoader } from "react-window-infinite-loader";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
@@ -172,14 +172,18 @@ export default function InfiniteVendorTable({
   const [hasNextPage, setHasNextPage] = useState(true);
 
   // Fetch vendors for a specific page
-  const { isLoading: isLoadingPage } = useQuery<VendorResponse>({
-    queryKey: ["/api/stores/current/vendors/metrics", 1, ITEMS_PER_PAGE, sortField, sortDirection, searchTerm],
-    onSuccess: (data) => {
+  const { data, isLoading: isLoadingPage } = useQuery<VendorResponse>({
+    queryKey: ["/api/stores/current/vendors/metrics", 1, ITEMS_PER_PAGE, sortField, sortDirection, searchTerm]
+  });
+
+  // Handle data when it loads
+  useMemo(() => {
+    if (data) {
       setVendorPages(new Map([[1, data.data]]));
       setTotalItems(data.pagination.total);
       setHasNextPage(data.pagination.hasNext);
     }
-  });
+  }, [data]);
 
   // Create a flat list of vendors with placeholders for unloaded items
   const vendors = useMemo(() => {
@@ -306,7 +310,7 @@ export default function InfiniteVendorTable({
           loadMoreItems={loadMoreItems}
           threshold={10} // Start loading when 10 items away from end
         >
-          {({ onItemsRendered, ref }) => (
+          {({ onItemsRendered, ref }: any) => (
             <List
               ref={ref}
               height={height}
@@ -316,7 +320,7 @@ export default function InfiniteVendorTable({
               onItemsRendered={onItemsRendered}
               overscanCount={5}
             >
-              {VendorRow}
+              {VendorRow as any}
             </List>
           )}
         </InfiniteLoader>
