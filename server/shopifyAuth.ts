@@ -1,7 +1,7 @@
 import { shopifyApp } from "@shopify/shopify-app-express";
 import { MemorySessionStorage } from "@shopify/shopify-app-session-storage-memory";
 import { ApiVersion } from "@shopify/shopify-api";
-import type { Express } from "express";
+import express, { type Express } from "express";
 import { storage } from "./storage";
 
 // Conditionally initialize Shopify App Configuration
@@ -407,7 +407,16 @@ export async function setupShopifyWebhooks(app: Express) {
     };
 
     // Webhook endpoint with HMAC verification
-    app.post(shopifyInstance.config.webhooks.path, shopifyInstance.processWebhooks({ webhookHandlers }));
+    // The processWebhooks middleware handles:
+    // 1. Raw body parsing (required for HMAC)
+    // 2. HMAC signature verification
+    // 3. Routing to appropriate webhook handlers
+    // 4. Automatic 200 OK response (required for Shopify)
+    app.post(
+      shopifyInstance.config.webhooks.path,
+      express.raw({ type: 'application/json' }), // Ensure raw body for HMAC verification
+      shopifyInstance.processWebhooks({ webhookHandlers })
+    );
     
     console.log("Shopify webhooks configured");
   } catch (error) {
@@ -697,8 +706,17 @@ export async function setupShopifyAuth(app: Express) {
     },
   };
 
-  // Webhook endpoint
-  app.post(shopifyInstance.config.webhooks.path, shopifyInstance.processWebhooks({ webhookHandlers }));
+  // Webhook endpoint with HMAC verification
+  // The processWebhooks middleware handles:
+  // 1. Raw body parsing (required for HMAC)
+  // 2. HMAC signature verification
+  // 3. Routing to appropriate webhook handlers
+  // 4. Automatic 200 OK response (required for Shopify)
+  app.post(
+    shopifyInstance.config.webhooks.path,
+    express.raw({ type: 'application/json' }), // Ensure raw body for HMAC verification
+    shopifyInstance.processWebhooks({ webhookHandlers })
+  );
   
   // Ensure the app can be embedded
   app.use((req, res, next) => {
