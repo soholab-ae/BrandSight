@@ -1,5 +1,6 @@
 import { storage } from "../storage";
 import type { Store, InsertProduct, InsertOrder, InsertOrderLineItem } from "@shared/schema";
+import { cacheService, CacheKeyBuilder } from "./cacheService";
 
 // Rate limiting and retry configuration
 interface RateLimitState {
@@ -198,8 +199,20 @@ export class ShopifyService {
       console.log(`Starting ${isIncrementalSync ? 'incremental' : 'full'} product sync for ${store.domain}`, 
                   lastSync ? { lastSync: lastSync.toISOString() } : {});
       
-      // Prefetch all vendors once to eliminate N+1 queries (O(1) lookups)
-      const existingVendors = await storage.getStoreVendors(store.id);
+      // Prefetch all vendors with caching to eliminate N+1 queries (O(1) lookups)
+      const vendorCacheKey = CacheKeyBuilder.vendors(store.id);
+      let existingVendors = cacheService.getSync(vendorCacheKey);
+      
+      if (!existingVendors) {
+        // Cache miss - fetch from database
+        existingVendors = await storage.getStoreVendors(store.id);
+        // Cache vendors for 5 minutes during sync operations
+        cacheService.setSync(vendorCacheKey, existingVendors, 300000);
+        console.log(`Vendor cache miss for store ${store.id}, fetched ${existingVendors.length} vendors from DB`);
+      } else {
+        console.log(`Vendor cache hit for store ${store.id}, using ${existingVendors.length} cached vendors`);
+      }
+      
       const vendorMap = new Map(existingVendors.map(v => [v.name, v]));
       
       // Track new vendors to create in bulk
@@ -241,6 +254,13 @@ export class ShopifyService {
           });
           vendorMap.set(vendorName, newVendor);
         }
+        
+        // Invalidate vendor cache if new vendors were created
+        if (newVendorsToCreate.size > 0) {
+          cacheService.invalidateStore(store.id); // Clear all store-related cache
+          console.log(`Invalidated cache for store ${store.id} due to ${newVendorsToCreate.size} new vendors`);
+        }
+        
         newVendorsToCreate.clear();
 
         // Second pass: prepare products for bulk upsert with O(1) vendor lookups

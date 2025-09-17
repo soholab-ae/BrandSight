@@ -5,6 +5,7 @@ import { setupAuth, isAuthenticated } from "./replitAuth";
 import { shopifyService } from "./services/shopifyService";
 import { insertStoreSchema } from "@shared/schema";
 import { createBillingSubscription, checkActiveSubscription, cancelSubscription } from "./shopifyBilling";
+import { cacheService, CacheKeyBuilder } from "./services/cacheService";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware - support both Replit and Shopify auth
@@ -387,7 +388,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/stores/current/vendors', authenticateOrDemo, async (req: any, res) => {
     try {
       const store = await getUserCurrentStore(req);
-      const vendors = await storage.getStoreVendors(store.id);
+      const cacheKey = CacheKeyBuilder.vendors(store.id);
+      
+      // Check cache first
+      let vendors = cacheService.getObject(cacheKey);
+      if (vendors) {
+        return res.json(vendors);
+      }
+      
+      // Cache miss - fetch from database
+      vendors = await storage.getStoreVendors(store.id);
+      
+      // Cache the result (10 minute TTL for vendor data)
+      cacheService.setObject(cacheKey, vendors, 600000);
+      
       res.json(vendors);
     } catch (error) {
       console.error("Error fetching current store vendors:", error);
@@ -406,12 +420,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const start = startDate ? new Date(startDate as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const end = endDate ? new Date(endDate as string) : new Date();
       
-      const summary = await storage.getVendorSummary(
+      const cacheKey = CacheKeyBuilder.vendorSummary(store.id, vendorId as string, start, end);
+      
+      // Check cache first
+      let summary = cacheService.getAnalytics(cacheKey);
+      if (summary) {
+        return res.json(summary);
+      }
+      
+      // Cache miss - fetch from database
+      summary = await storage.getVendorSummary(
         store.id,
         vendorId as string,
         start,
         end
       );
+      
+      // Cache the result (15 minute TTL for analytics data)
+      cacheService.setAnalytics(cacheKey, summary, 900000);
       
       res.json(summary);
     } catch (error) {
@@ -427,12 +453,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const store = await getUserCurrentStore(req);
       const { vendorId, limit } = req.query;
+      const limitNum = limit ? parseInt(limit as string) : 10;
       
-      const topProducts = await storage.getTopProducts(
+      const cacheKey = CacheKeyBuilder.topProducts(store.id, vendorId as string, limitNum);
+      
+      // Check cache first
+      let topProducts = cacheService.getAnalytics(cacheKey);
+      if (topProducts) {
+        return res.json(topProducts);
+      }
+      
+      // Cache miss - fetch from database
+      topProducts = await storage.getTopProducts(
         store.id,
         vendorId as string,
-        limit ? parseInt(limit as string) : 10
+        limitNum
       );
+      
+      // Cache the result (15 minute TTL for analytics data)
+      cacheService.setAnalytics(cacheKey, topProducts, 900000);
       
       res.json(topProducts);
     } catch (error) {
@@ -448,12 +487,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const store = await getUserCurrentStore(req);
       const { vendorId, limit } = req.query;
+      const limitNum = limit ? parseInt(limit as string) : 10;
       
-      const topPages = await storage.getTopLandingPages(
+      const cacheKey = CacheKeyBuilder.landingPages(store.id, vendorId as string, limitNum);
+      
+      // Check cache first
+      let topPages = cacheService.getAnalytics(cacheKey);
+      if (topPages) {
+        return res.json(topPages);
+      }
+      
+      // Cache miss - fetch from database
+      topPages = await storage.getTopLandingPages(
         store.id,
         vendorId as string,
-        limit ? parseInt(limit as string) : 10
+        limitNum
       );
+      
+      // Cache the result (15 minute TTL for analytics data)
+      cacheService.setAnalytics(cacheKey, topPages, 900000);
       
       res.json(topPages);
     } catch (error) {
@@ -469,7 +521,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/stores/:storeId/vendors', authenticate, async (req: any, res) => {
     try {
       const { storeId } = req.params;
-      const vendors = await storage.getStoreVendors(storeId);
+      const cacheKey = CacheKeyBuilder.vendors(storeId);
+      
+      // Check cache first
+      let vendors = cacheService.getObject(cacheKey);
+      if (vendors) {
+        return res.json(vendors);
+      }
+      
+      // Cache miss - fetch from database
+      vendors = await storage.getStoreVendors(storeId);
+      
+      // Cache the result (10 minute TTL for vendor data)
+      cacheService.setObject(cacheKey, vendors, 600000);
+      
       res.json(vendors);
     } catch (error) {
       console.error("Error fetching vendors:", error);
@@ -486,12 +551,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const start = startDate ? new Date(startDate as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const end = endDate ? new Date(endDate as string) : new Date();
       
-      const analytics = await storage.getVendorAnalytics(
+      const cacheKey = CacheKeyBuilder.analytics(storeId, vendorId as string, start, end);
+      
+      // Check cache first
+      let analytics = cacheService.getAnalytics(cacheKey);
+      if (analytics) {
+        return res.json(analytics);
+      }
+      
+      // Cache miss - fetch from database
+      analytics = await storage.getVendorAnalytics(
         storeId,
         vendorId as string,
         start,
         end
       );
+      
+      // Cache the result (15 minute TTL for analytics data)
+      cacheService.setAnalytics(cacheKey, analytics, 900000);
       
       res.json(analytics);
     } catch (error) {
@@ -508,12 +585,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const start = startDate ? new Date(startDate as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const end = endDate ? new Date(endDate as string) : new Date();
       
-      const summary = await storage.getVendorSummary(
+      const cacheKey = CacheKeyBuilder.vendorSummary(storeId, vendorId as string, start, end);
+      
+      // Check cache first
+      let summary = cacheService.getAnalytics(cacheKey);
+      if (summary) {
+        return res.json(summary);
+      }
+      
+      // Cache miss - fetch from database
+      summary = await storage.getVendorSummary(
         storeId,
         vendorId as string,
         start,
         end
       );
+      
+      // Cache the result (15 minute TTL for analytics data)
+      cacheService.setAnalytics(cacheKey, summary, 900000);
       
       res.json(summary);
     } catch (error) {
@@ -526,12 +615,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { storeId } = req.params;
       const { vendorId, limit } = req.query;
+      const limitNum = limit ? parseInt(limit as string) : 10;
       
-      const topProducts = await storage.getTopProducts(
+      const cacheKey = CacheKeyBuilder.topProducts(storeId, vendorId as string, limitNum);
+      
+      // Check cache first
+      let topProducts = cacheService.getAnalytics(cacheKey);
+      if (topProducts) {
+        return res.json(topProducts);
+      }
+      
+      // Cache miss - fetch from database
+      topProducts = await storage.getTopProducts(
         storeId,
         vendorId as string,
-        limit ? parseInt(limit as string) : 10
+        limitNum
       );
+      
+      // Cache the result (15 minute TTL for analytics data)
+      cacheService.setAnalytics(cacheKey, topProducts, 900000);
       
       res.json(topProducts);
     } catch (error) {
@@ -544,12 +646,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { storeId } = req.params;
       const { vendorId, limit } = req.query;
+      const limitNum = limit ? parseInt(limit as string) : 10;
       
-      const topPages = await storage.getTopLandingPages(
+      const cacheKey = CacheKeyBuilder.landingPages(storeId, vendorId as string, limitNum);
+      
+      // Check cache first
+      let topPages = cacheService.getAnalytics(cacheKey);
+      if (topPages) {
+        return res.json(topPages);
+      }
+      
+      // Cache miss - fetch from database
+      topPages = await storage.getTopLandingPages(
         storeId,
         vendorId as string,
-        limit ? parseInt(limit as string) : 10
+        limitNum
       );
+      
+      // Cache the result (15 minute TTL for analytics data)
+      cacheService.setAnalytics(cacheKey, topPages, 900000);
       
       res.json(topPages);
     } catch (error) {
@@ -568,13 +683,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Store not found" });
       }
       
+      // Clear analytics cache before sync to ensure fresh data
+      cacheService.invalidateAnalytics(storeId);
+      console.log(`Cleared analytics cache for store ${storeId} before sync`);
+      
       await shopifyService.syncProducts(store);
       await shopifyService.syncOrders(store);
+      
+      // Clear all caches after sync to ensure fresh data for next requests
+      cacheService.invalidateStore(storeId);
+      console.log(`Cleared all caches for store ${storeId} after sync completion`);
       
       res.json({ message: "Sync completed successfully" });
     } catch (error) {
       console.error("Error syncing store:", error);
       res.status(500).json({ message: "Failed to sync store" });
+    }
+  });
+
+  // Cache management and metrics routes (for debugging and monitoring)
+  app.get('/api/cache/metrics', authenticate, (req: any, res) => {
+    try {
+      const metrics = cacheService.getMetrics();
+      res.json({
+        ...metrics,
+        timestamp: new Date().toISOString(),
+        message: 'Cache metrics retrieved successfully'
+      });
+    } catch (error) {
+      console.error("Error fetching cache metrics:", error);
+      res.status(500).json({ message: "Failed to fetch cache metrics" });
+    }
+  });
+
+  app.post('/api/cache/clear/:storeId', authenticate, (req: any, res) => {
+    try {
+      const { storeId } = req.params;
+      cacheService.invalidateStore(storeId);
+      res.json({ 
+        message: `Cache cleared for store ${storeId}`,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Error clearing cache:", error);
+      res.status(500).json({ message: "Failed to clear cache" });
     }
   });
 
