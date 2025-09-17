@@ -323,24 +323,6 @@ export default function Billing() {
                   </CardContent>
                 </Card>
 
-                {/* Billing History */}
-                <Card className="mt-6">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Calendar className="h-5 w-5" />
-                      Billing History
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-center py-8 text-gray-500">
-                      <Calendar className="h-8 w-8 mx-auto mb-3 text-gray-400" />
-                      <p className="text-sm">No billing history available</p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        Past invoices and payments will appear here
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
               </div>
 
               {/* Plan Details & Features */}
@@ -380,10 +362,6 @@ export default function Billing() {
                     <Button variant="outline" size="sm" className="w-full justify-start" data-testid="button-contact-support">
                       <Shield className="h-4 w-4 mr-2" />
                       Contact Support
-                    </Button>
-                    <Button variant="outline" size="sm" className="w-full justify-start" data-testid="button-view-docs">
-                      <Download className="h-4 w-4 mr-2" />
-                      Download Invoice
                     </Button>
                   </CardContent>
                 </Card>
