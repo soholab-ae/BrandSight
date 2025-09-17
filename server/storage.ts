@@ -54,11 +54,14 @@ export interface IStorage {
   
   // Product operations
   upsertProduct(product: InsertProduct): Promise<Product>;
+  bulkUpsertProducts(products: InsertProduct[]): Promise<Product[]>;
   getVendorProducts(vendorId: string): Promise<Product[]>;
   
   // Order operations
   upsertOrder(order: InsertOrder): Promise<Order>;
+  bulkUpsertOrders(orders: InsertOrder[]): Promise<Order[]>;
   upsertOrderLineItem(item: InsertOrderLineItem): Promise<OrderLineItem>;
+  bulkUpsertOrderLineItems(items: InsertOrderLineItem[]): Promise<OrderLineItem[]>;
   
   // Analytics operations
   upsertVendorAnalytics(analytics: InsertVendorAnalytics): Promise<VendorAnalytics>;
@@ -168,6 +171,30 @@ export class DatabaseStorage implements IStorage {
     return upsertedProduct;
   }
 
+  async bulkUpsertProducts(productList: InsertProduct[]): Promise<Product[]> {
+    if (productList.length === 0) return [];
+    
+    const upsertedProducts = await db
+      .insert(products)
+      .values(productList)
+      .onConflictDoUpdate({
+        target: products.id,
+        set: {
+          title: sql.raw('excluded.title'),
+          handle: sql.raw('excluded.handle'),
+          vendor: sql.raw('excluded.vendor'),
+          vendorId: sql.raw('excluded.vendor_id'),
+          productType: sql.raw('excluded.product_type'),
+          price: sql.raw('excluded.price'),
+          compareAtPrice: sql.raw('excluded.compare_at_price'),
+          status: sql.raw('excluded.status'),
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return upsertedProducts;
+  }
+
   async getVendorProducts(vendorId: string): Promise<Product[]> {
     // Return demo products for demo vendor
     if (vendorId.startsWith('vendor_')) {
@@ -189,6 +216,33 @@ export class DatabaseStorage implements IStorage {
     return upsertedOrder;
   }
 
+  async bulkUpsertOrders(orderList: InsertOrder[]): Promise<Order[]> {
+    if (orderList.length === 0) return [];
+    
+    const upsertedOrders = await db
+      .insert(orders)
+      .values(orderList)
+      .onConflictDoUpdate({
+        target: orders.id,
+        set: {
+          orderNumber: sql.raw('excluded.order_number'),
+          totalPrice: sql.raw('excluded.total_price'),
+          subtotalPrice: sql.raw('excluded.subtotal_price'),
+          totalTax: sql.raw('excluded.total_tax'),
+          currency: sql.raw('excluded.currency'),
+          financialStatus: sql.raw('excluded.financial_status'),
+          fulfillmentStatus: sql.raw('excluded.fulfillment_status'),
+          customerEmail: sql.raw('excluded.customer_email'),
+          customerId: sql.raw('excluded.customer_id'),
+          landingPage: sql.raw('excluded.landing_page'),
+          referringSite: sql.raw('excluded.referring_site'),
+          processedAt: sql.raw('excluded.processed_at'),
+        },
+      })
+      .returning();
+    return upsertedOrders;
+  }
+
   async upsertOrderLineItem(item: InsertOrderLineItem): Promise<OrderLineItem> {
     const [upsertedItem] = await db
       .insert(orderLineItems)
@@ -199,6 +253,29 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return upsertedItem;
+  }
+
+  async bulkUpsertOrderLineItems(itemList: InsertOrderLineItem[]): Promise<OrderLineItem[]> {
+    if (itemList.length === 0) return [];
+    
+    const upsertedItems = await db
+      .insert(orderLineItems)
+      .values(itemList)
+      .onConflictDoUpdate({
+        target: orderLineItems.id,
+        set: {
+          orderId: sql.raw('excluded.order_id'),
+          productId: sql.raw('excluded.product_id'),
+          vendorId: sql.raw('excluded.vendor_id'),
+          title: sql.raw('excluded.title'),
+          vendor: sql.raw('excluded.vendor'),
+          quantity: sql.raw('excluded.quantity'),
+          price: sql.raw('excluded.price'),
+          totalDiscount: sql.raw('excluded.total_discount'),
+        },
+      })
+      .returning();
+    return upsertedItems;
   }
 
   // Analytics operations
