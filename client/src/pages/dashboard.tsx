@@ -10,6 +10,7 @@ import VendorPerformanceChart from "@/components/VendorPerformanceChart";
 import TopProducts from "@/components/TopProducts";
 import VendorComparisonTable from "@/components/VendorComparisonTable";
 import LandingPagesAnalysis from "@/components/LandingPagesAnalysis";
+import ReferralSources from "@/components/ReferralSources";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { RefreshCw, Download, InfoIcon } from "lucide-react";
@@ -171,6 +172,9 @@ export default function Dashboard() {
 
           {/* Vendor Comparison Table */}
           <VendorComparisonTable dateRange={dateRange} />
+
+          {/* Top Referral Sources */}
+          <ReferralSources />
 
           {/* Landing Pages Analysis */}
           <LandingPagesAnalysis />

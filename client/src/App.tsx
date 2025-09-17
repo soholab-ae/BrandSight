@@ -10,6 +10,7 @@ import Welcome from "@/pages/welcome";
 import Setup from "@/pages/setup";
 import Sync from "@/pages/sync";
 import Dashboard from "@/pages/dashboard";
+import VendorPerformance from "@/pages/vendors";
 import SalesAnalytics from "@/pages/sales";
 import CustomerInsights from "@/pages/customers";
 import ProductPerformance from "@/pages/products";
@@ -62,6 +63,7 @@ function OnboardingRouter() {
       
       {/* Main dashboard and analytics pages */}
       <Route path="/" component={Dashboard} />
+      <Route path="/vendors" component={VendorPerformance} />
       <Route path="/sales" component={SalesAnalytics} />
       <Route path="/customers" component={CustomerInsights} />
       <Route path="/products" component={ProductPerformance} />

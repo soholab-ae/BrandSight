@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BarChart3, ShoppingCart, Users, Package, Download } from "lucide-react";
+import { BarChart3, ShoppingCart, Users, Package, Download, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navigationItems = [
   { path: "/", label: "Overview", icon: BarChart3 },
+  { path: "/vendors", label: "Vendor Performance", icon: TrendingUp },
   { path: "/sales", label: "Sales Analytics", icon: ShoppingCart },
   { path: "/customers", label: "Customer Insights", icon: Users },
   { path: "/products", label: "Product Performance", icon: Package },
