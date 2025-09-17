@@ -19,12 +19,12 @@ export default function MetricsGrid() {
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
         {[1, 2, 3, 4].map((i) => (
-          <Card key={i} className="p-6">
+          <Card key={i} className="p-4 sm:p-6">
             <Skeleton className="h-4 w-24 mb-4" />
-            <Skeleton className="h-8 w-16 mb-2" />
-            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-6 sm:h-8 w-16 mb-2" />
+            <Skeleton className="h-3 sm:h-4 w-20" />
           </Card>
         ))}
       </div>
@@ -75,27 +75,27 @@ export default function MetricsGrid() {
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
       {metrics.map((metric) => {
         const Icon = metric.icon;
         return (
           <Card key={metric.title} className="shadow-sm border border-gray-200">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-medium text-gray-600">{metric.title}</h3>
-                <div className={`w-8 h-8 ${metric.iconBg} rounded-lg flex items-center justify-center`}>
-                  <Icon className={`${metric.iconColor}`} size={16} />
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <h3 className="text-xs sm:text-sm font-medium text-gray-600 leading-tight">{metric.title}</h3>
+                <div className={`w-7 h-7 sm:w-8 sm:h-8 ${metric.iconBg} rounded-lg flex items-center justify-center`}>
+                  <Icon className={`${metric.iconColor}`} size={14} />
                 </div>
               </div>
               <div className="mb-2">
                 <span 
-                  className="text-2xl font-bold text-gray-900"
+                  className="text-xl sm:text-2xl font-bold text-gray-900 leading-tight"
                   data-testid={`${metric.testId}-value`}
                 >
                   {metric.value}
                 </span>
               </div>
-              <div className="flex items-center text-sm">
+              <div className="flex items-center text-xs sm:text-sm">
                 <span 
                   className={`font-medium ${
                     metric.changeType === 'positive' ? 'text-green-600' : 'text-red-600'
@@ -104,7 +104,8 @@ export default function MetricsGrid() {
                 >
                   {metric.change}
                 </span>
-                <span className="text-gray-600 ml-1">vs last period</span>
+                <span className="text-gray-600 ml-1 hidden sm:inline">vs last period</span>
+                <span className="text-gray-600 ml-1 sm:hidden">vs last</span>
               </div>
             </CardContent>
           </Card>

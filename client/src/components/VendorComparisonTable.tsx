@@ -253,23 +253,24 @@ export default function VendorComparisonTable({ dateRange }: VendorComparisonTab
   };
 
   return (
-    <Card className="shadow-sm border border-gray-200 p-6 mb-8">
-      <CardHeader className="px-0 pb-6">
-        <div className="flex items-center justify-between mb-4">
-          <CardTitle className="text-lg font-semibold text-gray-900">
+    <Card className="shadow-sm border border-gray-200 p-4 sm:p-6 mb-6 sm:mb-8">
+      <CardHeader className="px-0 pb-4 sm:pb-6">
+        <div className="flex flex-col space-y-4 sm:space-y-0 sm:flex-row sm:items-center sm:justify-between">
+          <CardTitle className="text-base sm:text-lg font-semibold text-gray-900">
             Vendor Performance Comparison
           </CardTitle>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 w-full sm:w-auto">
             <Popover>
               <PopoverTrigger asChild>
                 <Button 
                   variant="outline" 
                   size="sm"
-                  className="text-gray-700 hover:bg-gray-50"
+                  className="text-gray-700 hover:bg-gray-50 flex-1 sm:flex-none touch-manipulation"
                   data-testid="button-export-vendors"
                 >
                   <Download size={16} className="mr-1" />
-                  Export
+                  <span className="hidden sm:inline">Export</span>
+                  <span className="sm:hidden">Export</span>
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-48 p-2">
@@ -302,11 +303,12 @@ export default function VendorComparisonTable({ dateRange }: VendorComparisonTab
                 <Button 
                   size="sm"
                   variant="outline"
-                  className="text-gray-700 hover:bg-gray-50"
+                  className="text-gray-700 hover:bg-gray-50 flex-1 sm:flex-none touch-manipulation"
                   data-testid="button-filter-vendors"
                 >
                   <Filter size={16} className="mr-1" />
-                  Filter
+                  <span className="hidden sm:inline">Filter</span>
+                  <span className="sm:hidden">Filter</span>
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-80 p-4">
@@ -358,8 +360,8 @@ export default function VendorComparisonTable({ dateRange }: VendorComparisonTab
 
         {/* Active Filters Display */}
         {(searchTerm || revenueFilter !== "all" || growthFilter !== "all") && (
-          <div className="flex items-center gap-2 mt-3">
-            <span className="text-sm text-gray-600">Active filters:</span>
+          <div className="flex flex-wrap items-center gap-2 mt-3">
+            <span className="text-xs sm:text-sm text-gray-600">Active filters:</span>
             {searchTerm && (
               <Badge variant="secondary" className="gap-1">
                 Search: "{searchTerm}"
@@ -408,7 +410,67 @@ export default function VendorComparisonTable({ dateRange }: VendorComparisonTab
       </CardHeader>
       
       <CardContent className="px-0">
-        <div className="overflow-x-auto">
+        {/* Mobile Card View - Hidden on desktop */}
+        <div className="block sm:hidden space-y-3">
+          {filteredAndSortedVendors.map((vendor) => (
+            <div 
+              key={vendor.id} 
+              className="bg-white border border-gray-200 rounded-lg p-4 cursor-pointer hover:bg-gray-50 transition-colors touch-manipulation"
+              data-testid={`card-vendor-${vendor.id}`}
+              onClick={() => handleVendorClick(vendor)}
+            >
+              <div className="flex items-center mb-3">
+                <div className={`w-10 h-10 bg-gradient-to-br ${vendorColors[vendor.name]} rounded-lg flex items-center justify-center text-white font-bold text-sm mr-3`}>
+                  {vendor.name[0]}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-medium text-gray-900 truncate" data-testid={`text-vendor-name-${vendor.id}`}>
+                    {vendor.name}
+                  </h3>
+                  <p className="text-xs text-gray-500" data-testid={`text-product-count-${vendor.id}`}>
+                    {vendor.productCount} products
+                  </p>
+                </div>
+                <Badge 
+                  variant={vendor.growth >= 0 ? "default" : "destructive"}
+                  className={`text-xs ${vendor.growth >= 0 ? "bg-green-100 text-green-800" : ""}`}
+                  data-testid={`badge-growth-${vendor.id}`}
+                >
+                  {vendor.growth >= 0 ? "+" : ""}{vendor.growth.toFixed(1)}%
+                </Badge>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <span className="text-gray-500 block">Revenue</span>
+                  <span className="font-medium text-gray-900" data-testid={`text-revenue-${vendor.id}`}>
+                    ${vendor.revenue.toLocaleString()}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-500 block">AOV</span>
+                  <span className="font-medium text-gray-900" data-testid={`text-aov-${vendor.id}`}>
+                    ${vendor.aov.toFixed(2)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-500 block">Conversion</span>
+                  <span className="font-medium text-gray-900" data-testid={`text-conversion-${vendor.id}`}>
+                    {vendor.conversion.toFixed(1)}%
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-500 block">Visitors</span>
+                  <span className="font-medium text-gray-900" data-testid={`text-visitors-${vendor.id}`}>
+                    {vendor.visitors.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        
+        {/* Desktop Table View - Hidden on mobile */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>

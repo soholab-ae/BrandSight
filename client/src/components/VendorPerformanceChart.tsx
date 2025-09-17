@@ -152,33 +152,34 @@ export default function VendorPerformanceChart({ dateRange }: VendorPerformanceC
 
   return (
     <Card className="shadow-sm border border-gray-200">
-      <CardHeader>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <Icon className="h-5 w-5 text-brand-600" />
-            <CardTitle className="text-lg font-semibold text-gray-900">
+      <CardHeader className="p-4 sm:p-6">
+        <div className="flex flex-col space-y-4 sm:space-y-0 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <Icon className="h-4 w-4 sm:h-5 sm:w-5 text-brand-600 flex-shrink-0" />
+            <CardTitle className="text-base sm:text-lg font-semibold text-gray-900 truncate">
               {metricInfo.title} by Vendor
             </CardTitle>
           </div>
           
           {/* Chart Controls */}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-col space-y-2 sm:space-y-0 sm:flex-row sm:space-x-2 w-full sm:w-auto">
             {/* Metric Selector */}
-            <div className="flex gap-1">
+            <div className="flex gap-1 w-full sm:w-auto">
               <Button
                 variant={selectedMetric === 'revenue' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setSelectedMetric('revenue')}
-                className={selectedMetric === 'revenue' ? 'bg-brand-600 hover:bg-brand-700' : ''}
+                className={`flex-1 sm:flex-none touch-manipulation ${selectedMetric === 'revenue' ? 'bg-brand-600 hover:bg-brand-700' : ''}`}
                 data-testid="button-metric-revenue"
               >
-                Revenue
+                <span className="hidden sm:inline">Revenue</span>
+                <span className="sm:hidden">Rev</span>
               </Button>
               <Button
                 variant={selectedMetric === 'aov' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setSelectedMetric('aov')}
-                className={selectedMetric === 'aov' ? 'bg-brand-600 hover:bg-brand-700' : ''}
+                className={`flex-1 sm:flex-none touch-manipulation ${selectedMetric === 'aov' ? 'bg-brand-600 hover:bg-brand-700' : ''}`}
                 data-testid="button-metric-aov"
               >
                 AOV
@@ -187,20 +188,21 @@ export default function VendorPerformanceChart({ dateRange }: VendorPerformanceC
                 variant={selectedMetric === 'conversion' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setSelectedMetric('conversion')}
-                className={selectedMetric === 'conversion' ? 'bg-brand-600 hover:bg-brand-700' : ''}
+                className={`flex-1 sm:flex-none touch-manipulation ${selectedMetric === 'conversion' ? 'bg-brand-600 hover:bg-brand-700' : ''}`}
                 data-testid="button-metric-conversion"
               >
-                Conversion
+                <span className="hidden sm:inline">Conversion</span>
+                <span className="sm:hidden">Conv</span>
               </Button>
             </div>
             
             {/* Chart Type Toggle */}
-            <div className="flex gap-1">
+            <div className="flex gap-1 w-full sm:w-auto">
               <Button
                 variant={chartType === 'area' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setChartType('area')}
-                className={chartType === 'area' ? 'bg-gray-600 hover:bg-gray-700' : ''}
+                className={`flex-1 sm:flex-none touch-manipulation ${chartType === 'area' ? 'bg-gray-600 hover:bg-gray-700' : ''}`}
                 data-testid="button-chart-area"
               >
                 Area
@@ -209,7 +211,7 @@ export default function VendorPerformanceChart({ dateRange }: VendorPerformanceC
                 variant={chartType === 'line' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setChartType('line')}
-                className={chartType === 'line' ? 'bg-gray-600 hover:bg-gray-700' : ''}
+                className={`flex-1 sm:flex-none touch-manipulation ${chartType === 'line' ? 'bg-gray-600 hover:bg-gray-700' : ''}`}
                 data-testid="button-chart-line"
               >
                 Line
@@ -234,8 +236,8 @@ export default function VendorPerformanceChart({ dateRange }: VendorPerformanceC
         </div>
       </CardHeader>
       
-      <CardContent>
-        <div className="h-80 w-full">
+      <CardContent className="p-4 sm:p-6">
+        <div className="h-64 sm:h-80 w-full">
           <ResponsiveContainer width="100%" height="100%">
             {chartType === 'area' ? (
               <AreaChart data={formatChartData()} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>

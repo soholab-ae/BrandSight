@@ -302,7 +302,7 @@ function verifyWebhookHMAC(secret: string) {
     // Calculate HMAC
     const hash = crypto
       .createHmac('sha256', secret)
-      .update(rawBody, 'utf8')
+      .update(rawBody)
       .digest('base64');
     
     // Compare HMACs
