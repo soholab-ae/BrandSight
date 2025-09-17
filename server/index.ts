@@ -3,7 +3,17 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
-app.use(express.json());
+
+// Apply JSON parsing to all routes EXCEPT webhooks (webhooks need raw body for HMAC verification)
+app.use((req, res, next) => {
+  if (req.path === '/api/webhooks') {
+    // Skip JSON parsing for webhook endpoint
+    next();
+  } else {
+    express.json()(req, res, next);
+  }
+});
+
 app.use(express.urlencoded({ extended: false }));
 
 // Add CSP headers for Shopify embedded app to work in Firefox
