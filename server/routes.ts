@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { shopifyService } from "./services/shopifyService";
 import { insertStoreSchema } from "@shared/schema";
+import { createBillingSubscription, checkActiveSubscription, cancelSubscription } from "./shopifyBilling";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware - support both Replit and Shopify auth
@@ -576,6 +577,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to sync store" });
     }
   });
+
+  // Billing routes (only for Shopify auth)
+  if (useShopifyAuth) {
+    // Check subscription status
+    app.get('/api/billing/status', authenticate, async (req: any, res) => {
+      try {
+        const session = req.shopifySession;
+        if (!session) {
+          return res.status(401).json({ message: "No Shopify session found" });
+        }
+        
+        const subscriptionStatus = await checkActiveSubscription(session);
+        res.json(subscriptionStatus);
+      } catch (error) {
+        console.error("Error checking subscription status:", error);
+        res.status(500).json({ message: "Failed to check subscription status" });
+      }
+    });
+    
+    // Create subscription
+    app.post('/api/billing/subscribe', authenticate, async (req: any, res) => {
+      try {
+        const session = req.shopifySession;
+        if (!session) {
+          return res.status(401).json({ message: "No Shopify session found" });
+        }
+        
+        // Check if already subscribed
+        const currentStatus = await checkActiveSubscription(session);
+        if (currentStatus.hasActiveSubscription) {
+          return res.status(400).json({ 
+            message: "Already have an active subscription",
+            subscription: currentStatus.subscription
+          });
+        }
+        
+        // Create new subscription
+        const { subscription, confirmationUrl } = await createBillingSubscription(
+          session,
+          req.body.planName || "BrandSight Premium"
+        );
+        
+        res.json({ 
+          subscription,
+          confirmationUrl,
+          message: "Subscription created. Redirect to confirmationUrl to complete."
+        });
+      } catch (error) {
+        console.error("Error creating subscription:", error);
+        res.status(500).json({ message: "Failed to create subscription" });
+      }
+    });
+    
+    // Cancel subscription
+    app.post('/api/billing/cancel', authenticate, async (req: any, res) => {
+      try {
+        const session = req.shopifySession;
+        if (!session) {
+          return res.status(401).json({ message: "No Shopify session found" });
+        }
+        
+        const { subscriptionId } = req.body;
+        if (!subscriptionId) {
+          return res.status(400).json({ message: "Subscription ID required" });
+        }
+        
+        const cancelledSubscription = await cancelSubscription(session, subscriptionId);
+        res.json({ 
+          subscription: cancelledSubscription,
+          message: "Subscription cancelled successfully"
+        });
+      } catch (error) {
+        console.error("Error cancelling subscription:", error);
+        res.status(500).json({ message: "Failed to cancel subscription" });
+      }
+    });
+    
+    // Billing callback (after merchant approves subscription)
+    app.get('/api/billing/callback', authenticate, async (req: any, res) => {
+      try {
+        const { charge_id } = req.query;
+        
+        // Redirect to dashboard with success message
+        res.redirect(`/?billing=success&charge_id=${charge_id}`);
+      } catch (error) {
+        console.error("Error in billing callback:", error);
+        res.redirect('/?billing=error');
+      }
+    });
+  }
 
   const httpServer = createServer(app);
   return httpServer;
