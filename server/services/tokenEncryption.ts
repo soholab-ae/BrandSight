@@ -163,7 +163,7 @@ export class TokenEncryption {
       .replace(/"access_token":\s*"[^"]+"/g, '"access_token": "[TOKEN_REDACTED]"')
       .replace(/accessToken:\s*[^\s,}]+/g, 'accessToken: [TOKEN_REDACTED]')
       .replace(/Bearer\s+[a-zA-Z0-9_-]+/gi, 'Bearer [TOKEN_REDACTED]')
-      .replace(/[a-zA-Z0-9]{32,}/g, (match) => {
+      .replace(/[a-zA-Z0-9]{32,}/g, (match: string) => {
         // Only redact if it looks like a token (long alphanumeric strings)
         if (match.length >= 32 && /^[a-zA-Z0-9_-]+$/.test(match)) {
           return '[POTENTIAL_TOKEN_REDACTED]';
