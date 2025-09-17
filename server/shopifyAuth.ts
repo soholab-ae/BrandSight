@@ -352,6 +352,29 @@ async function setupWebhookEndpoint(app: Express, path: string = '/api/webhooks'
   // Combined webhook handlers (GDPR + regular)
   const allWebhookHandlers = {
     ...gdprWebhookHandlers,
+    'app/uninstalled': async (topic: string, shop: string, body: string, webhookId: string) => {
+      try {
+        console.log(`Received ${topic} webhook from ${shop} (ID: ${webhookId})`);
+        const uninstallData = JSON.parse(body);
+        
+        const store = await storage.getStoreByDomain(shop);
+        if (store) {
+          console.log(`Processing app uninstall for store: ${store.id}`);
+          // Mark store as inactive and stop processing
+          await storage.updateStore(store.id, {
+            isActive: false,
+            lastSyncAt: new Date(),
+          });
+          console.log(`Successfully marked store ${store.id} as inactive`);
+        } else {
+          console.warn(`Store not found for uninstall webhook: ${shop}`);
+        }
+        
+        console.log(`Successfully processed ${topic} webhook from ${shop}`);
+      } catch (error) {
+        console.error(`Error processing ${topic} webhook from ${shop}:`, TokenEncryption.sanitizeForLogging(error));
+      }
+    },
     'orders/create': async (topic: string, shop: string, body: string, webhookId: string) => {
       try {
         console.log(`Received ${topic} webhook from ${shop} (ID: ${webhookId})`);
