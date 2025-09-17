@@ -1,6 +1,21 @@
 import { storage } from "../storage";
 import type { Store, InsertProduct, InsertOrder, InsertOrderLineItem } from "@shared/schema";
 
+// Rate limiting and retry configuration
+interface RateLimitState {
+  currentCallCount: number;
+  maxCallCount: number;
+  leakBucketLevel: number;
+  lastResetTime: number;
+}
+
+interface RetryConfig {
+  maxRetries: number;
+  baseDelay: number;
+  maxDelay: number;
+  jitterFactor: number;
+}
+
 interface ShopifyProduct {
   id: number;
   title: string;
@@ -44,58 +59,196 @@ interface ShopifyOrder {
 }
 
 export class ShopifyService {
-  private async makeShopifyRequest(store: Store, endpoint: string, params?: Record<string, string>) {
-    const url = new URL(`https://${store.domain}/admin/api/2024-10/${endpoint}.json`);
-    
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        url.searchParams.append(key, value);
+  private rateLimitState: Map<string, RateLimitState> = new Map();
+  private readonly retryConfig: RetryConfig = {
+    maxRetries: 3,
+    baseDelay: 1000, // 1 second
+    maxDelay: 32000, // 32 seconds
+    jitterFactor: 0.1
+  };
+  
+  private async sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+  
+  private getDelayWithJitter(baseDelay: number): number {
+    const jitter = (Math.random() - 0.5) * this.retryConfig.jitterFactor * baseDelay;
+    return Math.min(baseDelay + jitter, this.retryConfig.maxDelay);
+  }
+  
+  private updateRateLimit(storeId: string, headers: Headers): void {
+    const callLimitHeader = headers.get('X-Shopify-Shop-Api-Call-Limit');
+    if (callLimitHeader) {
+      const [current, max] = callLimitHeader.split('/').map(Number);
+      
+      this.rateLimitState.set(storeId, {
+        currentCallCount: current,
+        maxCallCount: max,
+        leakBucketLevel: current / max,
+        lastResetTime: Date.now()
       });
     }
-
-    const response = await fetch(url.toString(), {
-      headers: {
-        'X-Shopify-Access-Token': store.accessToken,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Shopify API error: ${response.status} ${response.statusText}`);
+  }
+  
+  private async checkRateLimit(storeId: string): Promise<void> {
+    const rateLimitState = this.rateLimitState.get(storeId);
+    if (!rateLimitState) return;
+    
+    // If we're approaching the rate limit (>80%), add delay
+    if (rateLimitState.leakBucketLevel > 0.8) {
+      const delay = Math.min(
+        (rateLimitState.leakBucketLevel - 0.8) * 5000, // Progressive delay up to 5s
+        5000
+      );
+      
+      console.log(`Rate limit approaching for ${storeId}, waiting ${delay}ms`);
+      await this.sleep(delay);
     }
-
-    return response.json();
   }
 
-  async syncProducts(store: Store): Promise<void> {
+  private async makeShopifyRequest(store: Store, endpoint: string, params?: Record<string, string>): Promise<{data: any, headers: Headers}> {
+    let retryCount = 0;
+    
+    while (retryCount <= this.retryConfig.maxRetries) {
+      try {
+        // Check and respect rate limits before making request
+        await this.checkRateLimit(store.id);
+        
+        const url = new URL(`https://${store.domain}/admin/api/2024-10/${endpoint}.json`);
+        
+        if (params) {
+          Object.entries(params).forEach(([key, value]) => {
+            url.searchParams.append(key, value);
+          });
+        }
+
+        const response = await fetch(url.toString(), {
+          headers: {
+            'X-Shopify-Access-Token': store.accessToken,
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        // Update rate limit tracking with response headers
+        this.updateRateLimit(store.id, response.headers);
+
+        // Handle rate limiting (429) and server errors (5xx) with retry
+        if (response.status === 429 || response.status >= 500) {
+          if (retryCount === this.retryConfig.maxRetries) {
+            throw new Error(`Shopify API error after ${retryCount} retries: ${response.status} ${response.statusText}`);
+          }
+          
+          let retryDelay = this.retryConfig.baseDelay * Math.pow(2, retryCount);
+          
+          // Respect Retry-After header if present
+          const retryAfterHeader = response.headers.get('Retry-After');
+          if (retryAfterHeader) {
+            const retryAfterMs = parseInt(retryAfterHeader) * 1000;
+            retryDelay = Math.max(retryDelay, retryAfterMs);
+          }
+          
+          // Add jitter to prevent thundering herd
+          retryDelay = this.getDelayWithJitter(retryDelay);
+          
+          console.log(`Shopify API ${response.status} error, retrying in ${retryDelay}ms (attempt ${retryCount + 1}/${this.retryConfig.maxRetries + 1})`);
+          
+          retryCount++;
+          await this.sleep(retryDelay);
+          continue;
+        }
+
+        if (!response.ok) {
+          throw new Error(`Shopify API error: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        return { data, headers: response.headers };
+        
+      } catch (error) {
+        if (retryCount === this.retryConfig.maxRetries) {
+          throw error;
+        }
+        
+        // Retry on network errors with exponential backoff
+        const retryDelay = this.getDelayWithJitter(
+          this.retryConfig.baseDelay * Math.pow(2, retryCount)
+        );
+        
+        console.log(`Network error, retrying in ${retryDelay}ms (attempt ${retryCount + 1}/${this.retryConfig.maxRetries + 1}):`, error);
+        
+        retryCount++;
+        await this.sleep(retryDelay);
+      }
+    }
+    
+    throw new Error(`Max retries exceeded for Shopify API request to ${endpoint}`);
+  }
+
+  async syncProducts(store: Store, forceFullSync = false): Promise<void> {
     try {
       let hasNextPage = true;
       let pageInfo = '';
+      let syncedCount = 0;
+      const syncStartTime = new Date();
+      
+      // Determine if this should be incremental or full sync
+      const lastSync = forceFullSync ? null : store.lastProductSyncAt;
+      const isIncrementalSync = !forceFullSync && lastSync;
+      
+      console.log(`Starting ${isIncrementalSync ? 'incremental' : 'full'} product sync for ${store.domain}`, 
+                  lastSync ? { lastSync: lastSync.toISOString() } : {});
+      
+      // Prefetch all vendors once to eliminate N+1 queries (O(1) lookups)
+      const existingVendors = await storage.getStoreVendors(store.id);
+      const vendorMap = new Map(existingVendors.map(v => [v.name, v]));
+      
+      // Track new vendors to create in bulk
+      const newVendorsToCreate = new Set<string>();
 
       while (hasNextPage) {
         const params: Record<string, string> = { limit: '250' };
+        
+        // Use incremental sync with updated_at_min for efficiency
+        if (isIncrementalSync && lastSync) {
+          params.updated_at_min = lastSync.toISOString();
+        }
+        
         if (pageInfo) {
           params.page_info = pageInfo;
         }
 
-        const data = await this.makeShopifyRequest(store, 'products', params);
+        const { data, headers } = await this.makeShopifyRequest(store, 'products', params);
         const products: ShopifyProduct[] = data.products;
-
+        
+        if (products.length === 0) {
+          console.log('No products to sync, breaking pagination loop');
+          break;
+        }
+        
+        // First pass: collect new vendor names
         for (const shopifyProduct of products) {
-          // Create or update vendor
-          let vendor = await storage.getStoreVendors(store.id).then(vendors => 
-            vendors.find(v => v.name === shopifyProduct.vendor)
-          );
-
-          if (!vendor && shopifyProduct.vendor) {
-            vendor = await storage.createVendor({
-              storeId: store.id,
-              name: shopifyProduct.vendor,
-              slug: shopifyProduct.vendor.toLowerCase().replace(/\s+/g, '-'),
-            });
+          if (shopifyProduct.vendor && !vendorMap.has(shopifyProduct.vendor)) {
+            newVendorsToCreate.add(shopifyProduct.vendor);
           }
+        }
+        
+        // Create new vendors in bulk
+        for (const vendorName of Array.from(newVendorsToCreate)) {
+          const newVendor = await storage.createVendor({
+            storeId: store.id,
+            name: vendorName,
+            slug: vendorName.toLowerCase().replace(/\s+/g, '-'),
+          });
+          vendorMap.set(vendorName, newVendor);
+        }
+        newVendorsToCreate.clear();
 
-          // Create product
+        // Second pass: prepare products for bulk upsert with O(1) vendor lookups
+        const productsToUpsert: InsertProduct[] = [];
+        
+        for (const shopifyProduct of products) {
+          const vendor = vendorMap.get(shopifyProduct.vendor);
+
           const product: InsertProduct = {
             id: shopifyProduct.id.toString(),
             storeId: store.id,
@@ -109,29 +262,60 @@ export class ShopifyService {
             status: shopifyProduct.status,
           };
 
-          await storage.upsertProduct(product);
+          productsToUpsert.push(product);
+        }
+        
+        // Bulk upsert products for better performance
+        if (productsToUpsert.length > 0) {
+          await storage.bulkUpsertProducts(productsToUpsert);
+          syncedCount += productsToUpsert.length;
         }
 
-        // Check for pagination
-        const linkHeader = data.headers?.link;
-        hasNextPage = linkHeader && linkHeader.includes('rel="next"');
-        if (hasNextPage) {
+        // Fix pagination - read headers from response, not parsed data
+        const linkHeader = headers.get('link');
+        hasNextPage = Boolean(linkHeader && linkHeader.includes('rel="next"'));
+        if (hasNextPage && linkHeader) {
           const nextPageMatch = linkHeader.match(/<[^>]*page_info=([^&>]*).*>;\s*rel="next"/);
           pageInfo = nextPageMatch ? nextPageMatch[1] : '';
         }
+        
+        // Progress logging for large syncs
+        if (syncedCount % 1000 === 0) {
+          console.log(`Product sync progress: ${syncedCount} products processed`);
+        }
       }
 
-      await storage.updateStore(store.id, { lastSyncAt: new Date() });
+      // Update sync timestamps
+      await storage.updateStore(store.id, { 
+        lastSyncAt: syncStartTime,
+        lastProductSyncAt: syncStartTime,
+        productSyncCursor: pageInfo || null
+      });
+      
+      console.log(`Product sync completed: ${syncedCount} products ${isIncrementalSync ? 'updated' : 'synced'}`);
     } catch (error) {
       console.error('Error syncing products:', error);
       throw error;
     }
   }
 
-  async syncOrders(store: Store, startDate?: Date): Promise<void> {
+  async syncOrders(store: Store, startDate?: Date, forceFullSync = false): Promise<void> {
     try {
       let hasNextPage = true;
       let pageInfo = '';
+      let syncedCount = 0;
+      const syncStartTime = new Date();
+      
+      // Determine sync strategy
+      const lastSync = forceFullSync ? null : (startDate || store.lastOrderSyncAt);
+      const isIncrementalSync = !forceFullSync && lastSync;
+      
+      console.log(`Starting ${isIncrementalSync ? 'incremental' : 'full'} order sync for ${store.domain}`, 
+                  lastSync ? { lastSync: lastSync.toISOString() } : {});
+      
+      // Prefetch vendors for order line items
+      const existingVendors = await storage.getStoreVendors(store.id);
+      const vendorMap = new Map(existingVendors.map(v => [v.name, v]));
 
       while (hasNextPage) {
         const params: Record<string, string> = { 
@@ -140,19 +324,29 @@ export class ShopifyService {
           financial_status: 'paid',
         };
         
-        if (startDate) {
-          params.created_at_min = startDate.toISOString();
+        // Use incremental sync with updated_at_min for efficiency
+        if (isIncrementalSync && lastSync) {
+          params.updated_at_min = lastSync.toISOString();
         }
         
         if (pageInfo) {
           params.page_info = pageInfo;
         }
 
-        const data = await this.makeShopifyRequest(store, 'orders', params);
+        const { data, headers } = await this.makeShopifyRequest(store, 'orders', params);
         const orders: ShopifyOrder[] = data.orders;
+        
+        if (orders.length === 0) {
+          console.log('No orders to sync, breaking pagination loop');
+          break;
+        }
 
+        // Prepare orders and line items for bulk operations
+        const ordersToUpsert: InsertOrder[] = [];
+        const lineItemsToUpsert: InsertOrderLineItem[] = [];
+        
         for (const shopifyOrder of orders) {
-          // Create order
+          // Prepare order
           const order: InsertOrder = {
             id: shopifyOrder.id.toString(),
             storeId: store.id,
@@ -170,13 +364,11 @@ export class ShopifyService {
             processedAt: shopifyOrder.processed_at ? new Date(shopifyOrder.processed_at) : null,
           };
 
-          await storage.upsertOrder(order);
+          ordersToUpsert.push(order);
 
-          // Create order line items
+          // Prepare line items with optimized vendor lookups
           for (const lineItem of shopifyOrder.line_items) {
-            // Find vendor for this product
-            const vendors = await storage.getStoreVendors(store.id);
-            const vendor = vendors.find(v => v.name === lineItem.vendor);
+            const vendor = vendorMap.get(lineItem.vendor);
 
             const orderLineItem: InsertOrderLineItem = {
               id: lineItem.id.toString(),
@@ -190,18 +382,42 @@ export class ShopifyService {
               totalDiscount: lineItem.total_discount,
             };
 
-            await storage.upsertOrderLineItem(orderLineItem);
+            lineItemsToUpsert.push(orderLineItem);
           }
         }
+        
+        // Bulk upsert orders and line items for better performance
+        if (ordersToUpsert.length > 0) {
+          await storage.bulkUpsertOrders(ordersToUpsert);
+          syncedCount += ordersToUpsert.length;
+        }
+        
+        if (lineItemsToUpsert.length > 0) {
+          await storage.bulkUpsertOrderLineItems(lineItemsToUpsert);
+        }
 
-        // Check for pagination
-        const linkHeader = data.headers?.link;
-        hasNextPage = linkHeader && linkHeader.includes('rel="next"');
-        if (hasNextPage) {
+        // Fix pagination - read headers from response, not parsed data
+        const linkHeader = headers.get('link');
+        hasNextPage = Boolean(linkHeader && linkHeader.includes('rel="next"'));
+        if (hasNextPage && linkHeader) {
           const nextPageMatch = linkHeader.match(/<[^>]*page_info=([^&>]*).*>;\s*rel="next"/);
           pageInfo = nextPageMatch ? nextPageMatch[1] : '';
         }
+        
+        // Progress logging for large syncs
+        if (syncedCount % 500 === 0) {
+          console.log(`Order sync progress: ${syncedCount} orders processed`);
+        }
       }
+      
+      // Update sync timestamps
+      await storage.updateStore(store.id, { 
+        lastSyncAt: syncStartTime,
+        lastOrderSyncAt: syncStartTime,
+        orderSyncCursor: pageInfo || null
+      });
+      
+      console.log(`Order sync completed: ${syncedCount} orders ${isIncrementalSync ? 'updated' : 'synced'}`);
     } catch (error) {
       console.error('Error syncing orders:', error);
       throw error;
@@ -345,7 +561,7 @@ export class ShopifyService {
       const endDate = new Date();
       const startDate = new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000); // Last 30 days
 
-      for (const vendorId of affectedVendors) {
+      for (const vendorId of Array.from(affectedVendors)) {
         const analytics = await this.calculateVendorAnalytics(storeId, vendorId, startDate, endDate);
         
         await storage.upsertVendorAnalytics({
@@ -433,7 +649,7 @@ export class ShopifyService {
 
   async getShopInfo(store: Store) {
     try {
-      const data = await this.makeShopifyRequest(store, 'shop');
+      const { data } = await this.makeShopifyRequest(store, 'shop');
       return data.shop;
     } catch (error) {
       console.error('Error getting shop info:', error);

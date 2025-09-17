@@ -44,6 +44,10 @@ export const stores = pgTable("stores", {
   accessToken: varchar("access_token").notNull(),
   isActive: boolean("is_active").default(true),
   lastSyncAt: timestamp("last_sync_at"),
+  lastProductSyncAt: timestamp("last_product_sync_at"),
+  lastOrderSyncAt: timestamp("last_order_sync_at"),
+  productSyncCursor: varchar("product_sync_cursor"),
+  orderSyncCursor: varchar("order_sync_cursor"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
