@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { List } from "react-window";
+import { FixedSizeList } from "react-window";
 import { InfiniteLoader } from "react-window-infinite-loader";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -311,7 +311,7 @@ export default function InfiniteVendorTable({
           threshold={10} // Start loading when 10 items away from end
         >
           {({ onItemsRendered, ref }: any) => (
-            <List
+            <FixedSizeList
               ref={ref}
               height={height}
               itemCount={itemCount}
@@ -321,7 +321,7 @@ export default function InfiniteVendorTable({
               overscanCount={5}
             >
               {VendorRow as any}
-            </List>
+            </FixedSizeList>
           )}
         </InfiniteLoader>
       </div>
