@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { BarChart3, ShoppingCart, Users, Package, Download, TrendingUp, Menu } from "lucide-react";
+import { BarChart3, ShoppingCart, Users, Package, Download, TrendingUp, Menu, CreditCard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 
@@ -14,6 +14,7 @@ const navigationItems = [
   { path: "/customers", label: "Customer Insights", icon: Users },
   { path: "/products", label: "Product Performance", icon: Package },
   { path: "/reports", label: "Export Reports", icon: Download },
+  { path: "/billing", label: "Billing & Subscription", icon: CreditCard },
 ];
 
 interface SidebarProps {
