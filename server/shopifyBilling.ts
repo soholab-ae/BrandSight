@@ -2,9 +2,9 @@ import { BillingInterval, BillingReplacementBehavior } from '@shopify/shopify-ap
 
 // Billing configuration for the Shopify app
 export const BILLING_CONFIG = {
-  // Standard plan: $49/month with 3-day free trial
+  // Single paid plan: $69/month with 3-day free trial
   "BrandSight Premium": {
-    amount: 49.00,
+    amount: 69.00,
     currencyCode: "USD",
     interval: BillingInterval.Every30Days,
     trialDays: 3,

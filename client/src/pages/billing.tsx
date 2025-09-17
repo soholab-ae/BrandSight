@@ -107,31 +107,14 @@ export default function Billing() {
   ];
 
   // Future plans (for display purposes)
-  const plans = [
-    {
-      name: "BrandSight Premium",
-      price: 49,
-      period: "month",
-      description: "Perfect for growing businesses",
-      features: premiumFeatures,
-      current: true,
-      popular: true
-    },
-    {
-      name: "BrandSight Enterprise",
-      price: 149,
-      period: "month", 
-      description: "Advanced features for large stores",
-      features: [
-        ...premiumFeatures,
-        { icon: Star, text: "Custom reporting dashboards", included: true },
-        { icon: Shield, text: "Dedicated account manager", included: true },
-        { icon: Zap, text: "API access for integrations", included: true },
-      ],
-      current: false,
-      comingSoon: true
-    }
-  ];
+  // Single BrandSight Premium plan - $69/month billed through Shopify
+  const currentPlan = {
+    name: "BrandSight Premium",
+    price: 69,
+    period: "month",
+    description: "Advanced vendor analytics for your Shopify store",
+    features: premiumFeatures
+  };
 
   if (!isAuthenticated) {
     return (
@@ -225,7 +208,7 @@ export default function Billing() {
                         <div className="flex items-center justify-between">
                           <div>
                             <h3 className="text-lg font-semibold text-gray-900">BrandSight Premium</h3>
-                            <p className="text-sm text-gray-600">$49.00 per month</p>
+                            <p className="text-sm text-gray-600">$69.00 per month • Billed through Shopify</p>
                           </div>
                           <div className="flex items-center gap-2">
                             {(billingStatus as any)?.isInTrial && (
@@ -267,7 +250,7 @@ export default function Billing() {
                             <AlertDescription>
                               Your free trial ends on{' '}
                               {new Date((billingStatus as any)?.subscription?.currentPeriodEnd).toLocaleDateString()}.
-                              You'll be automatically charged $49.00 unless you cancel before then.
+                              You'll be automatically charged $69.00 through Shopify unless you cancel before then.
                             </AlertDescription>
                           </Alert>
                         )}
@@ -314,7 +297,7 @@ export default function Billing() {
                           <CreditCard className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                           <h3 className="text-lg font-semibold text-gray-900 mb-2">No Active Subscription</h3>
                           <p className="text-gray-600 mb-4">
-                            Upgrade to BrandSight Premium to unlock advanced vendor analytics
+                            Subscribe to BrandSight Premium ($69/month) through Shopify to unlock advanced vendor analytics
                           </p>
                           <Button
                             onClick={() => subscribeMutation.mutate()}
@@ -407,91 +390,45 @@ export default function Billing() {
               </div>
             </div>
 
-            {/* Plan Comparison */}
+            {/* Billing Information */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-center">
-                  Choose Your Plan
+                  {currentPlan.name}
                 </CardTitle>
                 <CardDescription className="text-center">
-                  Compare features and choose the plan that's right for your business
+                  {currentPlan.description}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid gap-6 lg:grid-cols-2">
-                  {plans.map((plan, index) => (
-                    <div 
-                      key={index} 
-                      className={`relative rounded-lg border p-6 ${
-                        plan.current 
-                          ? 'border-brand-200 bg-brand-50' 
-                          : plan.comingSoon 
-                            ? 'border-gray-200 bg-gray-50 opacity-75'
-                            : 'border-gray-200'
-                      }`}
-                    >
-                      {plan.popular && (
-                        <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                          <Badge className="bg-brand-600 text-white">
-                            Most Popular
-                          </Badge>
-                        </div>
-                      )}
-                      
-                      {plan.comingSoon && (
-                        <div className="absolute -top-3 right-4">
-                          <Badge variant="outline">
-                            Coming Soon
-                          </Badge>
-                        </div>
-                      )}
+                <div className="text-center mb-6">
+                  <div className="flex items-baseline justify-center gap-1 mb-2">
+                    <span className="text-3xl font-bold text-gray-900">
+                      ${currentPlan.price}
+                    </span>
+                    <span className="text-gray-600">/{currentPlan.period}</span>
+                  </div>
+                  <p className="text-sm text-gray-600">
+                    Billed through Shopify • 3-day free trial included
+                  </p>
+                </div>
 
-                      <div className="text-center mb-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                          {plan.name}
-                        </h3>
-                        <div className="flex items-baseline justify-center gap-1 mb-2">
-                          <span className="text-3xl font-bold text-gray-900">
-                            ${plan.price}
-                          </span>
-                          <span className="text-gray-600">/{plan.period}</span>
+                <div className="max-w-md mx-auto">
+                  <h4 className="text-sm font-medium text-gray-900 mb-3">What's included:</h4>
+                  <div className="space-y-2">
+                    {currentPlan.features.slice(0, 6).map((feature, index) => {
+                      const Icon = feature.icon;
+                      return (
+                        <div key={index} className="flex items-center gap-3">
+                          <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+                          <div className="flex items-center gap-2">
+                            <Icon className="h-4 w-4 text-gray-600" />
+                            <span className="text-sm text-gray-700">{feature.text}</span>
+                          </div>
                         </div>
-                        <p className="text-sm text-gray-600">{plan.description}</p>
-                      </div>
-
-                      <div className="space-y-3 mb-6">
-                        {plan.features.map((feature, featureIndex) => {
-                          const Icon = feature.icon;
-                          return (
-                            <div key={featureIndex} className="flex items-center gap-3">
-                              <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
-                              <div className="flex items-center gap-2">
-                                <Icon className="h-4 w-4 text-gray-600" />
-                                <span className="text-sm text-gray-700">{feature.text}</span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      <Button 
-                        className="w-full"
-                        variant={plan.current ? "default" : plan.comingSoon ? "ghost" : "outline"}
-                        disabled={plan.current || plan.comingSoon}
-                      >
-                        {plan.current ? (
-                          <>
-                            <CheckCircle className="h-4 w-4 mr-2" />
-                            Current Plan
-                          </>
-                        ) : plan.comingSoon ? (
-                          'Coming Soon'
-                        ) : (
-                          'Upgrade to This Plan'
-                        )}
-                      </Button>
-                    </div>
-                  ))}
+                      );
+                    })}
+                  </div>
                 </div>
               </CardContent>
             </Card>
