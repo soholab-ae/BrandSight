@@ -2,6 +2,7 @@ import { shopifyApp } from "@shopify/shopify-app-express";
 import { MemorySessionStorage } from "@shopify/shopify-app-session-storage-memory";
 import { ApiVersion } from "@shopify/shopify-api";
 import express, { type Express } from "express";
+import crypto from "crypto";
 import { storage } from "./storage";
 
 // Conditionally initialize Shopify App Configuration
@@ -239,6 +240,82 @@ async function registerWebhooks(session: any) {
   }
 }
 
+// GDPR webhook handlers - defined once for reuse
+const gdprWebhookHandlers = {
+  'customers/data_request': async (topic: string, shop: string, body: string, webhookId: string) => {
+    console.log(`Received GDPR ${topic} webhook from ${shop}`);
+    const data = JSON.parse(body);
+    console.log(`Customer data request for shop ${shop}:`, data);
+    // In production, gather customer data and send it
+    // This handler must return 200 to pass Shopify's automated checks
+  },
+  
+  'customers/redact': async (topic: string, shop: string, body: string, webhookId: string) => {
+    console.log(`Received GDPR ${topic} webhook from ${shop}`);
+    const data = JSON.parse(body);
+    console.log(`Customer redaction request for shop ${shop}:`, data);
+    // In production, delete customer data
+    // This handler must return 200 to pass Shopify's automated checks
+  },
+  
+  'shop/redact': async (topic: string, shop: string, body: string, webhookId: string) => {
+    console.log(`Received GDPR ${topic} webhook from ${shop}`);
+    const data = JSON.parse(body);
+    console.log(`Shop redaction request for shop ${shop}:`, data);
+    
+    try {
+      const store = await storage.getStoreByDomain(shop);
+      if (store) {
+        console.log(`Processing shop redaction for store: ${store.id}`);
+        // In production, delete all shop data
+      }
+    } catch (error) {
+      console.error(`Error processing shop redaction for ${shop}:`, error);
+    }
+    // This handler must return 200 to pass Shopify's automated checks
+  },
+};
+
+// Custom HMAC verification middleware that returns exact status codes
+function verifyWebhookHMAC(secret: string) {
+  return (req: any, res: any, next: any) => {
+    const hmacHeader = req.get('X-Shopify-Hmac-Sha256');
+    
+    if (!hmacHeader) {
+      console.log('Webhook verification failed: No HMAC header');
+      return res.status(401).send('Unauthorized');
+    }
+    
+    const rawBody = req.body;
+    if (!rawBody || !Buffer.isBuffer(rawBody)) {
+      console.log('Webhook verification failed: No raw body');
+      return res.status(401).send('Unauthorized');
+    }
+    
+    // Calculate HMAC
+    const hash = crypto
+      .createHmac('sha256', secret)
+      .update(rawBody, 'utf8')
+      .digest('base64');
+    
+    // Compare HMACs
+    if (hash !== hmacHeader) {
+      console.log('Webhook verification failed: HMAC mismatch');
+      return res.status(401).send('Unauthorized');
+    }
+    
+    // HMAC is valid, parse the body for the handlers
+    try {
+      req.body = JSON.parse(rawBody.toString('utf8'));
+    } catch (error) {
+      console.error('Failed to parse webhook body:', error);
+      return res.status(400).send('Bad Request');
+    }
+    
+    next();
+  };
+}
+
 // Setup webhook handlers only (for use with non-Shopify auth)
 export async function setupShopifyWebhooks(app: Express) {
   // Check if we have the necessary environment variables for webhook processing
@@ -251,173 +328,8 @@ export async function setupShopifyWebhooks(app: Express) {
   }
   
   try {
-    const shopifyInstance = initializeShopify();
-    
-    // GDPR Compliance webhook handlers (mandatory for Shopify App Store)
-    const gdprHandlers = {
-      'customers/data_request': async (topic: string, shop: string, body: string, webhookId: string) => {
-        console.log(`Received GDPR ${topic} webhook from ${shop}`);
-        const data = JSON.parse(body);
-        console.log(`Customer data request for shop ${shop}:`, data);
-        // This handler must return 200 to pass Shopify's automated checks
-      },
-      
-      'customers/redact': async (topic: string, shop: string, body: string, webhookId: string) => {
-        console.log(`Received GDPR ${topic} webhook from ${shop}`);
-        const data = JSON.parse(body);
-        console.log(`Customer redaction request for shop ${shop}:`, data);
-        // This handler must return 200 to pass Shopify's automated checks
-      },
-      
-      'shop/redact': async (topic: string, shop: string, body: string, webhookId: string) => {
-        console.log(`Received GDPR ${topic} webhook from ${shop}`);
-        const data = JSON.parse(body);
-        console.log(`Shop redaction request for shop ${shop}:`, data);
-        
-        try {
-          const store = await storage.getStoreByDomain(shop);
-          if (store) {
-            console.log(`Processing shop redaction for store: ${store.id}`);
-          }
-        } catch (error) {
-          console.error(`Error processing shop redaction for ${shop}:`, error);
-        }
-        // This handler must return 200 to pass Shopify's automated checks
-      },
-    };
-    
-    // Webhook handlers
-    const webhookHandlers = {
-      ...gdprHandlers,
-      'orders/create': async (topic: string, shop: string, body: string, webhookId: string) => {
-        try {
-          console.log(`Received ${topic} webhook from ${shop} (ID: ${webhookId})`);
-          const orderData = JSON.parse(body);
-          
-          // Find the store by shop domain
-          const store = await storage.getStoreByDomain(shop);
-          
-          if (!store) {
-            console.error(`Store not found for shop domain: ${shop}`);
-            return;
-          }
-          
-          // Import and use ShopifyService
-          const { shopifyService } = await import('./services/shopifyService');
-          await shopifyService.handleOrderWebhook(orderData, store.id);
-          
-          console.log(`Successfully processed ${topic} webhook from ${shop}`);
-        } catch (error) {
-          console.error(`Error processing ${topic} webhook from ${shop}:`, error);
-        }
-      },
-      
-      'orders/updated': async (topic: string, shop: string, body: string, webhookId: string) => {
-        try {
-          console.log(`Received ${topic} webhook from ${shop} (ID: ${webhookId})`);
-          const orderData = JSON.parse(body);
-          
-          // Find the store by shop domain
-          const store = await storage.getStoreByDomain(shop);
-          
-          if (!store) {
-            console.error(`Store not found for shop domain: ${shop}`);
-            return;
-          }
-          
-          // Import and use ShopifyService
-          const { shopifyService } = await import('./services/shopifyService');
-          await shopifyService.handleOrderWebhook(orderData, store.id);
-          
-          console.log(`Successfully processed ${topic} webhook from ${shop}`);
-        } catch (error) {
-          console.error(`Error processing ${topic} webhook from ${shop}:`, error);
-        }
-      },
-      
-      'products/create': async (topic: string, shop: string, body: string, webhookId: string) => {
-        try {
-          console.log(`Received ${topic} webhook from ${shop} (ID: ${webhookId})`);
-          const productData = JSON.parse(body);
-          
-          // Find the store by shop domain
-          const store = await storage.getStoreByDomain(shop);
-          
-          if (!store) {
-            console.error(`Store not found for shop domain: ${shop}`);
-            return;
-          }
-          
-          // Import and use ShopifyService
-          const { shopifyService } = await import('./services/shopifyService');
-          await shopifyService.handleProductWebhook(productData, store.id);
-          
-          console.log(`Successfully processed ${topic} webhook from ${shop}`);
-        } catch (error) {
-          console.error(`Error processing ${topic} webhook from ${shop}:`, error);
-        }
-      },
-      
-      'products/update': async (topic: string, shop: string, body: string, webhookId: string) => {
-        try {
-          console.log(`Received ${topic} webhook from ${shop} (ID: ${webhookId})`);
-          const productData = JSON.parse(body);
-          
-          // Find the store by shop domain
-          const store = await storage.getStoreByDomain(shop);
-          
-          if (!store) {
-            console.error(`Store not found for shop domain: ${shop}`);
-            return;
-          }
-          
-          // Import and use ShopifyService
-          const { shopifyService } = await import('./services/shopifyService');
-          await shopifyService.handleProductWebhook(productData, store.id);
-          
-          console.log(`Successfully processed ${topic} webhook from ${shop}`);
-        } catch (error) {
-          console.error(`Error processing ${topic} webhook from ${shop}:`, error);
-        }
-      },
-      
-      'customers/create': async (topic: string, shop: string, body: string, webhookId: string) => {
-        try {
-          console.log(`Received ${topic} webhook from ${shop} (ID: ${webhookId})`);
-          const customerData = JSON.parse(body);
-          
-          // Find the store by shop domain
-          const store = await storage.getStoreByDomain(shop);
-          
-          if (!store) {
-            console.error(`Store not found for shop domain: ${shop}`);
-            return;
-          }
-          
-          // Import and use ShopifyService
-          const { shopifyService } = await import('./services/shopifyService');
-          await shopifyService.handleCustomerWebhook(customerData, store.id);
-          
-          
-          console.log(`Successfully processed ${topic} webhook from ${shop}`);
-        } catch (error) {
-          console.error(`Error processing ${topic} webhook from ${shop}:`, error);
-        }
-      },
-    };
-
-    // Webhook endpoint with HMAC verification
-    // The processWebhooks middleware handles:
-    // 1. Raw body parsing (required for HMAC)
-    // 2. HMAC signature verification
-    // 3. Routing to appropriate webhook handlers
-    // 4. Automatic 200 OK response (required for Shopify)
-    app.post(
-      shopifyInstance.config.webhooks.path,
-      express.raw({ type: 'application/json' }), // Ensure raw body for HMAC verification
-      shopifyInstance.processWebhooks({ webhookHandlers })
-    );
-    
+    // Use the shared webhook endpoint implementation
+    await setupWebhookEndpoint(app, '/api/webhooks');
     console.log("Shopify webhooks configured");
   } catch (error) {
     console.error("Error setting up Shopify webhooks:", error);
@@ -425,6 +337,140 @@ export async function setupShopifyWebhooks(app: Express) {
 }
 
 // Setup Shopify authentication
+// Shared function to set up webhook endpoint with proper HMAC verification
+async function setupWebhookEndpoint(app: Express, path: string = '/api/webhooks') {
+  const webhookSecret = process.env.SHOPIFY_API_SECRET!;
+  
+  // Combined webhook handlers (GDPR + regular)
+  const allWebhookHandlers = {
+    ...gdprWebhookHandlers,
+    'orders/create': async (topic: string, shop: string, body: string, webhookId: string) => {
+      try {
+        console.log(`Received ${topic} webhook from ${shop} (ID: ${webhookId})`);
+        const orderData = JSON.parse(body);
+        
+        const store = await storage.getStoreByDomain(shop);
+        if (!store) {
+          console.error(`Store not found for shop domain: ${shop}`);
+          return;
+        }
+        
+        const { shopifyService } = await import('./services/shopifyService');
+        await shopifyService.handleOrderWebhook(orderData, store.id);
+        console.log(`Successfully processed ${topic} webhook from ${shop}`);
+      } catch (error) {
+        console.error(`Error processing ${topic} webhook from ${shop}:`, error);
+      }
+    },
+    
+    'orders/updated': async (topic: string, shop: string, body: string, webhookId: string) => {
+      try {
+        console.log(`Received ${topic} webhook from ${shop} (ID: ${webhookId})`);
+        const orderData = JSON.parse(body);
+        
+        const store = await storage.getStoreByDomain(shop);
+        if (!store) {
+          console.error(`Store not found for shop domain: ${shop}`);
+          return;
+        }
+        
+        const { shopifyService } = await import('./services/shopifyService');
+        await shopifyService.handleOrderWebhook(orderData, store.id);
+        console.log(`Successfully processed ${topic} webhook from ${shop}`);
+      } catch (error) {
+        console.error(`Error processing ${topic} webhook from ${shop}:`, error);
+      }
+    },
+    
+    'products/create': async (topic: string, shop: string, body: string, webhookId: string) => {
+      try {
+        console.log(`Received ${topic} webhook from ${shop} (ID: ${webhookId})`);
+        const productData = JSON.parse(body);
+        
+        const store = await storage.getStoreByDomain(shop);
+        if (!store) {
+          console.error(`Store not found for shop domain: ${shop}`);
+          return;
+        }
+        
+        const { shopifyService } = await import('./services/shopifyService');
+        await shopifyService.handleProductWebhook(productData, store.id);
+        console.log(`Successfully processed ${topic} webhook from ${shop}`);
+      } catch (error) {
+        console.error(`Error processing ${topic} webhook from ${shop}:`, error);
+      }
+    },
+    
+    'products/update': async (topic: string, shop: string, body: string, webhookId: string) => {
+      try {
+        console.log(`Received ${topic} webhook from ${shop} (ID: ${webhookId})`);
+        const productData = JSON.parse(body);
+        
+        const store = await storage.getStoreByDomain(shop);
+        if (!store) {
+          console.error(`Store not found for shop domain: ${shop}`);
+          return;
+        }
+        
+        const { shopifyService } = await import('./services/shopifyService');
+        await shopifyService.handleProductWebhook(productData, store.id);
+        console.log(`Successfully processed ${topic} webhook from ${shop}`);
+      } catch (error) {
+        console.error(`Error processing ${topic} webhook from ${shop}:`, error);
+      }
+    },
+    
+    'customers/create': async (topic: string, shop: string, body: string, webhookId: string) => {
+      try {
+        console.log(`Received ${topic} webhook from ${shop} (ID: ${webhookId})`);
+        const customerData = JSON.parse(body);
+        
+        const store = await storage.getStoreByDomain(shop);
+        if (!store) {
+          console.error(`Store not found for shop domain: ${shop}`);
+          return;
+        }
+        
+        const { shopifyService } = await import('./services/shopifyService');
+        await shopifyService.handleCustomerWebhook(customerData, store.id);
+        console.log(`Successfully processed ${topic} webhook from ${shop}`);
+      } catch (error) {
+        console.error(`Error processing ${topic} webhook from ${shop}:`, error);
+      }
+    },
+  };
+  
+  // Setup webhook endpoint with custom HMAC verification
+  app.post(
+    path,
+    express.raw({ type: 'application/json' }),
+    verifyWebhookHMAC(webhookSecret),
+    async (req: any, res) => {
+      try {
+        const topic = req.get('X-Shopify-Topic');
+        const shop = req.get('X-Shopify-Shop-Domain');
+        const webhookId = req.get('X-Shopify-Webhook-Id');
+        
+        console.log(`Processing webhook: ${topic} from ${shop}`);
+        
+        const handler = allWebhookHandlers[topic as keyof typeof allWebhookHandlers];
+        if (handler) {
+          await handler(topic!, shop!, JSON.stringify(req.body), webhookId!);
+          res.status(200).send('OK');
+        } else {
+          console.warn(`No handler for webhook topic: ${topic}`);
+          res.status(200).send('OK');
+        }
+      } catch (error) {
+        console.error('Error processing webhook:', error);
+        res.status(200).send('OK');
+      }
+    }
+  );
+  
+  console.log(`Webhook endpoint configured at ${path}`);
+}
+
 export async function setupShopifyAuth(app: Express) {
   validateShopifyConfig();
   
@@ -545,178 +591,8 @@ export async function setupShopifyAuth(app: Express) {
     }
   );
   
-  // GDPR Compliance webhook handlers (mandatory for Shopify App Store)
-  const gdprHandlers = {
-    'customers/data_request': async (topic: string, shop: string, body: string, webhookId: string) => {
-      console.log(`Received GDPR ${topic} webhook from ${shop}`);
-      // In production, you would gather customer data and send it to the provided email
-      // For now, we acknowledge the request
-      const data = JSON.parse(body);
-      console.log(`Customer data request for shop ${shop}:`, data);
-      // Store the request in database for processing if needed
-      // This handler must return 200 to pass Shopify's automated checks
-    },
-    
-    'customers/redact': async (topic: string, shop: string, body: string, webhookId: string) => {
-      console.log(`Received GDPR ${topic} webhook from ${shop}`);
-      // In production, delete customer data from your database
-      const data = JSON.parse(body);
-      console.log(`Customer redaction request for shop ${shop}:`, data);
-      // Delete customer data from database
-      // This handler must return 200 to pass Shopify's automated checks
-    },
-    
-    'shop/redact': async (topic: string, shop: string, body: string, webhookId: string) => {
-      console.log(`Received GDPR ${topic} webhook from ${shop}`);
-      // In production, delete all shop data from your database
-      const data = JSON.parse(body);
-      console.log(`Shop redaction request for shop ${shop}:`, data);
-      
-      // Delete shop and all related data from database
-      try {
-        const store = await storage.getStoreByDomain(shop);
-        if (store) {
-          // Delete all vendor analytics, products, orders, and store data
-          console.log(`Deleting all data for store: ${store.id}`);
-          // await storage.deleteStore(store.id); // Implement this method as needed
-        }
-      } catch (error) {
-        console.error(`Error processing shop redaction for ${shop}:`, error);
-      }
-      // This handler must return 200 to pass Shopify's automated checks
-    },
-  };
-  
-  // Webhook handlers
-  const webhookHandlers = {
-    ...gdprHandlers,
-    'orders/create': async (topic: string, shop: string, body: string, webhookId: string) => {
-      try {
-        console.log(`Received ${topic} webhook from ${shop} (ID: ${webhookId})`);
-        const orderData = JSON.parse(body);
-        
-        // Find the store by shop domain
-        const store = await storage.getStoreByDomain(shop);
-        
-        if (!store) {
-          console.error(`Store not found for shop domain: ${shop}`);
-          return;
-        }
-        
-        // Import and use ShopifyService
-        const { shopifyService } = await import('./services/shopifyService');
-        await shopifyService.handleOrderWebhook(orderData, store.id);
-        
-        console.log(`Successfully processed ${topic} webhook from ${shop}`);
-      } catch (error) {
-        console.error(`Error processing ${topic} webhook from ${shop}:`, error);
-      }
-    },
-    
-    'orders/updated': async (topic: string, shop: string, body: string, webhookId: string) => {
-      try {
-        console.log(`Received ${topic} webhook from ${shop} (ID: ${webhookId})`);
-        const orderData = JSON.parse(body);
-        
-        // Find the store by shop domain
-        const store = await storage.getStoreByDomain(shop);
-        
-        if (!store) {
-          console.error(`Store not found for shop domain: ${shop}`);
-          return;
-        }
-        
-        // Import and use ShopifyService
-        const { shopifyService } = await import('./services/shopifyService');
-        await shopifyService.handleOrderWebhook(orderData, store.id);
-        
-        console.log(`Successfully processed ${topic} webhook from ${shop}`);
-      } catch (error) {
-        console.error(`Error processing ${topic} webhook from ${shop}:`, error);
-      }
-    },
-    
-    'products/create': async (topic: string, shop: string, body: string, webhookId: string) => {
-      try {
-        console.log(`Received ${topic} webhook from ${shop} (ID: ${webhookId})`);
-        const productData = JSON.parse(body);
-        
-        // Find the store by shop domain
-        const store = await storage.getStoreByDomain(shop);
-        
-        if (!store) {
-          console.error(`Store not found for shop domain: ${shop}`);
-          return;
-        }
-        
-        // Import and use ShopifyService
-        const { shopifyService } = await import('./services/shopifyService');
-        await shopifyService.handleProductWebhook(productData, store.id);
-        
-        console.log(`Successfully processed ${topic} webhook from ${shop}`);
-      } catch (error) {
-        console.error(`Error processing ${topic} webhook from ${shop}:`, error);
-      }
-    },
-    
-    'products/update': async (topic: string, shop: string, body: string, webhookId: string) => {
-      try {
-        console.log(`Received ${topic} webhook from ${shop} (ID: ${webhookId})`);
-        const productData = JSON.parse(body);
-        
-        // Find the store by shop domain
-        const store = await storage.getStoreByDomain(shop);
-        
-        if (!store) {
-          console.error(`Store not found for shop domain: ${shop}`);
-          return;
-        }
-        
-        // Import and use ShopifyService
-        const { shopifyService } = await import('./services/shopifyService');
-        await shopifyService.handleProductWebhook(productData, store.id);
-        
-        console.log(`Successfully processed ${topic} webhook from ${shop}`);
-      } catch (error) {
-        console.error(`Error processing ${topic} webhook from ${shop}:`, error);
-      }
-    },
-    
-    'customers/create': async (topic: string, shop: string, body: string, webhookId: string) => {
-      try {
-        console.log(`Received ${topic} webhook from ${shop} (ID: ${webhookId})`);
-        const customerData = JSON.parse(body);
-        
-        // Find the store by shop domain
-        const store = await storage.getStoreByDomain(shop);
-        
-        if (!store) {
-          console.error(`Store not found for shop domain: ${shop}`);
-          return;
-        }
-        
-        // Import and use ShopifyService
-        const { shopifyService } = await import('./services/shopifyService');
-        await shopifyService.handleCustomerWebhook(customerData, store.id);
-        
-        console.log(`Successfully processed ${topic} webhook from ${shop}`);
-      } catch (error) {
-        console.error(`Error processing ${topic} webhook from ${shop}:`, error);
-      }
-    },
-  };
-
-  // Webhook endpoint with HMAC verification
-  // The processWebhooks middleware handles:
-  // 1. Raw body parsing (required for HMAC)
-  // 2. HMAC signature verification
-  // 3. Routing to appropriate webhook handlers
-  // 4. Automatic 200 OK response (required for Shopify)
-  app.post(
-    shopifyInstance.config.webhooks.path,
-    express.raw({ type: 'application/json' }), // Ensure raw body for HMAC verification
-    shopifyInstance.processWebhooks({ webhookHandlers })
-  );
+  // Setup webhook endpoint using the shared implementation
+  await setupWebhookEndpoint(app, shopifyInstance.config.webhooks.path);
   
   // Ensure the app can be embedded
   app.use((req, res, next) => {
