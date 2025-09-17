@@ -10,6 +10,11 @@ import { Download, Filter, Search, ArrowUpDown, ArrowUp, ArrowDown, FileSpreadsh
 import { Skeleton } from "@/components/ui/skeleton";
 import VendorDetailModal from "@/components/VendorDetailModal";
 import { exportToCSV, exportToExcel, VendorExportData } from "@/utils/exportUtils";
+import DataPagination, { usePagination, type PaginationData } from "@/components/DataPagination";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import VirtualizedVendorTable from "@/components/VirtualizedVendorTable";
+import InfiniteVendorTable from "@/components/InfiniteVendorTable";
+import { Switch } from "@/components/ui/switch";
 
 interface VendorMetrics {
   id: string;
@@ -20,6 +25,12 @@ interface VendorMetrics {
   conversion: number;
   visitors: number;
   growth: number;
+  totalOrders: number;
+}
+
+interface PaginatedVendorResponse {
+  data: VendorMetrics[];
+  pagination: PaginationData;
 }
 
 interface DateRange {
@@ -32,19 +43,38 @@ interface VendorComparisonTableProps {
 }
 
 export default function VendorComparisonTable({ dateRange }: VendorComparisonTableProps) {
-  const { data: vendors, isLoading } = useQuery<VendorMetrics[]>({
-    queryKey: ["/api/stores/current/vendors"],
-  });
-
-  const [selectedVendor, setSelectedVendor] = useState<VendorMetrics | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-
-  // Filtering and sorting states
+  // Pagination state
+  const { page, limit, setPage, setLimit } = usePagination(1, 25);
+  
+  // Search and filter states
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState<keyof VendorMetrics>("revenue");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [revenueFilter, setRevenueFilter] = useState<string>("all");
   const [growthFilter, setGrowthFilter] = useState<string>("all");
+  
+  // Debounced search to avoid too many API calls
+  const debouncedSearch = useDebouncedValue(searchTerm, 300);
+  
+  // Virtualization toggle
+  const [useVirtualization, setUseVirtualization] = useState(false);
+  const [useInfiniteScroll, setUseInfiniteScroll] = useState(false);
+  
+  // Modal states
+  const [selectedVendor, setSelectedVendor] = useState<VendorMetrics | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Query paginated vendor metrics
+  const { data: vendorResponse, isLoading } = useQuery<PaginatedVendorResponse>({
+    queryKey: ["/api/stores/current/vendors/metrics", page, limit, sortField, sortDirection, debouncedSearch],
+  });
+
+  const vendors = vendorResponse?.data || [];
+  const paginationData = vendorResponse?.pagination;
+  
+  // Auto-enable virtualization for large datasets
+  const shouldUseVirtualization = paginationData && paginationData.total > 100;
+  const effectiveVirtualization = useVirtualization || shouldUseVirtualization;
 
   const handleVendorClick = (vendor: VendorMetrics) => {
     setSelectedVendor(vendor);
@@ -65,40 +95,54 @@ export default function VendorComparisonTable({ dateRange }: VendorComparisonTab
     return 'All time';
   };
 
-  const handleExportCSV = () => {
-    const exportData: VendorExportData[] = filteredAndSortedVendors.map(vendor => ({
-      id: vendor.id,
-      name: vendor.name,
-      revenue: vendor.revenue,
-      aov: vendor.aov,
-      conversion: vendor.conversion,
-      visitors: vendor.visitors,
-      productCount: vendor.productCount,
-      growth: vendor.growth
-    }));
+  // Server-side export handlers with progress tracking
+  const [exportProgress, setExportProgress] = useState<{ type: string; progress: number } | null>(null);
 
-    exportToCSV(exportData, {
-      filename: 'vendor-analytics-comparison',
-      dateRange: formatDateRange()
-    });
+  const handleServerExport = async (format: 'csv' | 'excel') => {
+    try {
+      setExportProgress({ type: format, progress: 0 });
+      
+      // Build export URL with current filters
+      const params = new URLSearchParams({
+        search: debouncedSearch || '',
+        sortBy: sortField,
+        sortDirection: sortDirection,
+        dateRange: formatDateRange() || 'all'
+      });
+      
+      const url = `/api/stores/current/vendors/export/${format}?${params.toString()}`;
+      
+      setExportProgress({ type: format, progress: 50 });
+      
+      // Create invisible link for download
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `vendor-analytics-${format === 'csv' ? 'csv' : 'xlsx'}`;
+      link.target = '_blank';
+      
+      // Add to DOM and click
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      setExportProgress({ type: format, progress: 100 });
+      
+      // Clear progress after a delay
+      setTimeout(() => setExportProgress(null), 1500);
+      
+    } catch (error) {
+      console.error(`Error exporting ${format}:`, error);
+      setExportProgress(null);
+      // You might want to show a toast error here
+    }
+  };
+
+  const handleExportCSV = () => {
+    handleServerExport('csv');
   };
 
   const handleExportExcel = () => {
-    const exportData: VendorExportData[] = filteredAndSortedVendors.map(vendor => ({
-      id: vendor.id,
-      name: vendor.name,
-      revenue: vendor.revenue,
-      aov: vendor.aov,
-      conversion: vendor.conversion,
-      visitors: vendor.visitors,
-      productCount: vendor.productCount,
-      growth: vendor.growth
-    }));
-
-    exportToExcel(exportData, {
-      filename: 'vendor-analytics-comparison',
-      dateRange: formatDateRange()
-    });
+    handleServerExport('excel');
   };
 
   const handleSort = (field: keyof VendorMetrics) => {
@@ -108,6 +152,17 @@ export default function VendorComparisonTable({ dateRange }: VendorComparisonTab
       setSortField(field);
       setSortDirection("desc");
     }
+    // Reset to first page when sorting changes
+    setPage(1);
+  };
+
+  // Handle pagination changes
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleLimitChange = (newLimit: number) => {
+    setLimit(newLimit);
   };
 
   const getSortIcon = (field: keyof VendorMetrics) => {
@@ -115,62 +170,12 @@ export default function VendorComparisonTable({ dateRange }: VendorComparisonTab
     return sortDirection === "asc" ? <ArrowUp className="w-4 h-4 text-blue-600" /> : <ArrowDown className="w-4 h-4 text-blue-600" />;
   };
 
-  // Mock data for demonstration since we don't have real data yet
-  const mockVendors: VendorMetrics[] = [
-    {
-      id: "nike",
-      name: "Nike",
-      productCount: 89,
-      revenue: 45230,
-      aov: 135.50,
-      conversion: 4.2,
-      visitors: 12450,
-      growth: 22.5,
-    },
-    {
-      id: "adidas",
-      name: "Adidas",
-      productCount: 67,
-      revenue: 32180,
-      aov: 118.90,
-      conversion: 3.8,
-      visitors: 9230,
-      growth: 15.2,
-    },
-    {
-      id: "puma",
-      name: "Puma",
-      productCount: 42,
-      revenue: 21050,
-      aov: 95.40,
-      conversion: 3.1,
-      visitors: 6890,
-      growth: -3.1,
-    },
-    {
-      id: "under-armour",
-      name: "Under Armour",
-      productCount: 28,
-      revenue: 9960,
-      aov: 89.20,
-      conversion: 2.7,
-      visitors: 4120,
-      growth: 8.9,
-    },
-  ];
+  // Filter vendors for client-side filters (revenue, growth)
+  // Search and sorting are now handled server-side
+  const filteredVendors = useMemo(() => {
+    let filtered = vendors;
 
-  // Filter and sort vendors
-  const filteredAndSortedVendors = useMemo(() => {
-    let filtered = mockVendors;
-
-    // Apply search filter
-    if (searchTerm) {
-      filtered = filtered.filter(vendor =>
-        vendor.name.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    // Apply revenue filter
+    // Apply revenue filter (client-side for simplicity)
     if (revenueFilter !== "all") {
       switch (revenueFilter) {
         case "high":
@@ -185,7 +190,7 @@ export default function VendorComparisonTable({ dateRange }: VendorComparisonTab
       }
     }
 
-    // Apply growth filter
+    // Apply growth filter (client-side for simplicity)
     if (growthFilter !== "all") {
       switch (growthFilter) {
         case "growing":
@@ -197,23 +202,8 @@ export default function VendorComparisonTable({ dateRange }: VendorComparisonTab
       }
     }
 
-    // Apply sorting - make a copy to avoid mutating the original array
-    const sorted = [...filtered].sort((a, b) => {
-      const aValue = a[sortField];
-      const bValue = b[sortField];
-      
-      let comparison = 0;
-      if (typeof aValue === "string" && typeof bValue === "string") {
-        comparison = aValue.localeCompare(bValue);
-      } else {
-        comparison = (aValue as number) - (bValue as number);
-      }
-      
-      return sortDirection === "asc" ? comparison : -comparison;
-    });
-
-    return sorted;
-  }, [searchTerm, revenueFilter, growthFilter, sortField, sortDirection]);
+    return filtered;
+  }, [vendors, revenueFilter, growthFilter]);
 
   if (isLoading) {
     return (
@@ -260,6 +250,38 @@ export default function VendorComparisonTable({ dateRange }: VendorComparisonTab
             Vendor Performance Comparison
           </CardTitle>
           <div className="flex items-center space-x-2 w-full sm:w-auto">
+            {/* Virtualization Controls */}
+            <div className="flex items-center space-x-4 text-sm">
+              {paginationData && paginationData.total > 50 && (
+                <>
+                  <div className="flex items-center space-x-2">
+                    <Switch 
+                      id="virtualization"
+                      checked={effectiveVirtualization}
+                      onCheckedChange={setUseVirtualization}
+                      disabled={shouldUseVirtualization}
+                    />
+                    <label htmlFor="virtualization" className="text-gray-600">
+                      Virtualization {shouldUseVirtualization && "(Auto)"}
+                    </label>
+                  </div>
+                  
+                  {effectiveVirtualization && (
+                    <div className="flex items-center space-x-2">
+                      <Switch 
+                        id="infinite-scroll"
+                        checked={useInfiniteScroll}
+                        onCheckedChange={setUseInfiniteScroll}
+                      />
+                      <label htmlFor="infinite-scroll" className="text-gray-600">
+                        Infinite Scroll
+                      </label>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            
             <Popover>
               <PopoverTrigger asChild>
                 <Button 
@@ -279,21 +301,41 @@ export default function VendorComparisonTable({ dateRange }: VendorComparisonTab
                     variant="ghost"
                     size="sm"
                     onClick={handleExportCSV}
-                    className="w-full justify-start text-gray-700 hover:bg-gray-50"
+                    disabled={exportProgress?.type === 'csv'}
+                    className="w-full justify-start text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                     data-testid="button-export-csv"
                   >
-                    <FileSpreadsheet size={16} className="mr-2" />
-                    Export as CSV
+                    {exportProgress?.type === 'csv' ? (
+                      <div className="flex items-center">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                        Exporting... {exportProgress.progress}%
+                      </div>
+                    ) : (
+                      <>
+                        <FileSpreadsheet size={16} className="mr-2" />
+                        Export as CSV
+                      </>
+                    )}
                   </Button>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={handleExportExcel}
-                    className="w-full justify-start text-gray-700 hover:bg-gray-50"
+                    disabled={exportProgress?.type === 'excel'}
+                    className="w-full justify-start text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                     data-testid="button-export-excel"
                   >
-                    <FileSpreadsheet size={16} className="mr-2" />
-                    Export as Excel
+                    {exportProgress?.type === 'excel' ? (
+                      <div className="flex items-center">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                        Exporting... {exportProgress.progress}%
+                      </div>
+                    ) : (
+                      <>
+                        <FileSpreadsheet size={16} className="mr-2" />
+                        Export as Excel
+                      </>
+                    )}
                   </Button>
                 </div>
               </PopoverContent>
@@ -352,7 +394,10 @@ export default function VendorComparisonTable({ dateRange }: VendorComparisonTab
           <Input
             placeholder="Search vendors..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setPage(1); // Reset to first page on search
+            }}
             className="pl-10"
             data-testid="input-search-vendors"
           />
@@ -366,7 +411,10 @@ export default function VendorComparisonTable({ dateRange }: VendorComparisonTab
               <Badge variant="secondary" className="gap-1">
                 Search: "{searchTerm}"
                 <button 
-                  onClick={() => setSearchTerm("")}
+                  onClick={() => {
+                    setSearchTerm("");
+                    setPage(1);
+                  }}
                   className="ml-1 text-gray-500 hover:text-gray-700"
                   data-testid="clear-search-filter"
                 >
@@ -402,189 +450,304 @@ export default function VendorComparisonTable({ dateRange }: VendorComparisonTab
         )}
 
         {/* Results Count */}
-        <div className="mt-3">
-          <span className="text-sm text-gray-600" data-testid="vendor-count">
-            Showing {filteredAndSortedVendors.length} of {mockVendors.length} vendors
-          </span>
-        </div>
+        {paginationData && (
+          <div className="mt-3">
+            <span className="text-sm text-gray-600" data-testid="vendor-count">
+              Showing {filteredVendors.length} of {paginationData.total} vendors
+            </span>
+          </div>
+        )}
       </CardHeader>
       
       <CardContent className="px-0">
-        {/* Mobile Card View - Hidden on desktop */}
-        <div className="block sm:hidden space-y-3">
-          {filteredAndSortedVendors.map((vendor) => (
-            <div 
-              key={vendor.id} 
-              className="bg-white border border-gray-200 rounded-lg p-4 cursor-pointer hover:bg-gray-50 transition-colors touch-manipulation"
-              data-testid={`card-vendor-${vendor.id}`}
-              onClick={() => handleVendorClick(vendor)}
-            >
-              <div className="flex items-center mb-3">
-                <div className={`w-10 h-10 bg-gradient-to-br ${vendorColors[vendor.name]} rounded-lg flex items-center justify-center text-white font-bold text-sm mr-3`}>
-                  {vendor.name[0]}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-medium text-gray-900 truncate" data-testid={`text-vendor-name-${vendor.id}`}>
-                    {vendor.name}
-                  </h3>
-                  <p className="text-xs text-gray-500" data-testid={`text-product-count-${vendor.id}`}>
-                    {vendor.productCount} products
-                  </p>
-                </div>
-                <Badge 
-                  variant={vendor.growth >= 0 ? "default" : "destructive"}
-                  className={`text-xs ${vendor.growth >= 0 ? "bg-green-100 text-green-800" : ""}`}
-                  data-testid={`badge-growth-${vendor.id}`}
-                >
-                  {vendor.growth >= 0 ? "+" : ""}{vendor.growth.toFixed(1)}%
-                </Badge>
-              </div>
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div>
-                  <span className="text-gray-500 block">Revenue</span>
-                  <span className="font-medium text-gray-900" data-testid={`text-revenue-${vendor.id}`}>
-                    ${vendor.revenue.toLocaleString()}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-gray-500 block">AOV</span>
-                  <span className="font-medium text-gray-900" data-testid={`text-aov-${vendor.id}`}>
-                    ${vendor.aov.toFixed(2)}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-gray-500 block">Conversion</span>
-                  <span className="font-medium text-gray-900" data-testid={`text-conversion-${vendor.id}`}>
-                    {vendor.conversion.toFixed(1)}%
-                  </span>
-                </div>
-                <div>
-                  <span className="text-gray-500 block">Visitors</span>
-                  <span className="font-medium text-gray-900" data-testid={`text-visitors-${vendor.id}`}>
-                    {vendor.visitors.toLocaleString()}
-                  </span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-        
-        {/* Desktop Table View - Hidden on mobile */}
-        <div className="hidden sm:block overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th 
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
-                  onClick={() => handleSort("name")}
-                  data-testid="header-vendor-name"
-                >
-                  <div className="flex items-center justify-between">
-                    Vendor
-                    {getSortIcon("name")}
-                  </div>
-                </th>
-                <th 
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
-                  onClick={() => handleSort("revenue")}
-                  data-testid="header-revenue"
-                >
-                  <div className="flex items-center justify-between">
-                    Revenue
-                    {getSortIcon("revenue")}
-                  </div>
-                </th>
-                <th 
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
-                  onClick={() => handleSort("aov")}
-                  data-testid="header-aov"
-                >
-                  <div className="flex items-center justify-between">
-                    AOV
-                    {getSortIcon("aov")}
-                  </div>
-                </th>
-                <th 
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
-                  onClick={() => handleSort("conversion")}
-                  data-testid="header-conversion"
-                >
-                  <div className="flex items-center justify-between">
-                    Conversion
-                    {getSortIcon("conversion")}
-                  </div>
-                </th>
-                <th 
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
-                  onClick={() => handleSort("visitors")}
-                  data-testid="header-visitors"
-                >
-                  <div className="flex items-center justify-between">
-                    Visitors
-                    {getSortIcon("visitors")}
-                  </div>
-                </th>
-                <th 
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
-                  onClick={() => handleSort("growth")}
-                  data-testid="header-growth"
-                >
-                  <div className="flex items-center justify-between">
-                    Growth
-                    {getSortIcon("growth")}
-                  </div>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredAndSortedVendors.map((vendor) => (
-                <tr 
+        {effectiveVirtualization ? (
+          // Use virtualized tables for large datasets
+          <div className="hidden sm:block">
+            {useInfiniteScroll ? (
+              <InfiniteVendorTable
+                searchTerm={debouncedSearch}
+                sortField={sortField}
+                sortDirection={sortDirection}
+                onSort={handleSort}
+                onVendorClick={handleVendorClick}
+                height={600}
+              />
+            ) : (
+              <VirtualizedVendorTable
+                vendors={filteredVendors}
+                onVendorClick={handleVendorClick}
+                sortField={sortField}
+                sortDirection={sortDirection}
+                onSort={handleSort}
+                height={600}
+              />
+            )}
+            
+            {/* Mobile view still shows cards for virtualized mode */}
+            <div className="block sm:hidden space-y-3">
+              {filteredVendors.slice(0, 20).map((vendor) => (
+                <div 
                   key={vendor.id} 
-                  className="hover:bg-gray-50 cursor-pointer transition-colors duration-200" 
-                  data-testid={`row-vendor-${vendor.id}`}
+                  className="bg-white border border-gray-200 rounded-lg p-4 cursor-pointer hover:bg-gray-50 transition-colors touch-manipulation"
+                  data-testid={`card-vendor-${vendor.id}`}
                   onClick={() => handleVendorClick(vendor)}
                 >
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className={`w-8 h-8 bg-gradient-to-br ${vendorColors[vendor.name]} rounded-lg flex items-center justify-center text-white font-bold text-sm`}>
-                        {vendor.name[0]}
-                      </div>
-                      <div className="ml-3">
-                        <div className="text-sm font-medium text-gray-900 hover:text-brand-600 transition-colors" data-testid={`text-vendor-name-${vendor.id}`}>
-                          {vendor.name}
-                        </div>
-                        <div className="text-sm text-gray-500" data-testid={`text-product-count-${vendor.id}`}>
-                          {vendor.productCount} products • Click for details
-                        </div>
-                      </div>
+                  <div className="flex items-center mb-3">
+                    <div className={`w-10 h-10 bg-gradient-to-br ${vendorColors[vendor.name]} rounded-lg flex items-center justify-center text-white font-bold text-sm mr-3`}>
+                      {vendor.name[0]}
                     </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900" data-testid={`text-revenue-${vendor.id}`}>
-                    ${vendor.revenue.toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900" data-testid={`text-aov-${vendor.id}`}>
-                    ${vendor.aov.toFixed(2)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900" data-testid={`text-conversion-${vendor.id}`}>
-                    {vendor.conversion.toFixed(1)}%
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900" data-testid={`text-visitors-${vendor.id}`}>
-                    {vendor.visitors.toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-medium text-gray-900 truncate" data-testid={`text-vendor-name-${vendor.id}`}>
+                        {vendor.name}
+                      </h3>
+                      <p className="text-xs text-gray-500" data-testid={`text-product-count-${vendor.id}`}>
+                        {vendor.productCount} products
+                      </p>
+                    </div>
                     <Badge 
                       variant={vendor.growth >= 0 ? "default" : "destructive"}
-                      className={vendor.growth >= 0 ? "bg-green-100 text-green-800 hover:bg-green-200" : ""}
+                      className={`text-xs ${vendor.growth >= 0 ? "bg-green-100 text-green-800" : ""}`}
                       data-testid={`badge-growth-${vendor.id}`}
                     >
                       {vendor.growth >= 0 ? "+" : ""}{vendor.growth.toFixed(1)}%
                     </Badge>
-                  </td>
-                </tr>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="text-gray-500 block">Revenue</span>
+                      <span className="font-medium text-gray-900" data-testid={`text-revenue-${vendor.id}`}>
+                        ${vendor.revenue.toLocaleString()}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block">AOV</span>
+                      <span className="font-medium text-gray-900" data-testid={`text-aov-${vendor.id}`}>
+                        ${vendor.aov.toFixed(2)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block">Conversion</span>
+                      <span className="font-medium text-gray-900" data-testid={`text-conversion-${vendor.id}`}>
+                        {vendor.conversion.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block">Visitors</span>
+                      <span className="font-medium text-gray-900" data-testid={`text-visitors-${vendor.id}`}>
+                        {vendor.visitors.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
-        </div>
+              {filteredVendors.length > 20 && (
+                <div className="text-center p-4 text-gray-500">
+                  Showing first 20 items on mobile. Use desktop for full list.
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          // Regular table view for smaller datasets
+          <>
+            {/* Mobile Card View - Hidden on desktop */}
+            <div className="block sm:hidden space-y-3">
+              {filteredVendors.map((vendor) => (
+                <div 
+                  key={vendor.id} 
+                  className="bg-white border border-gray-200 rounded-lg p-4 cursor-pointer hover:bg-gray-50 transition-colors touch-manipulation"
+                  data-testid={`card-vendor-${vendor.id}`}
+                  onClick={() => handleVendorClick(vendor)}
+                >
+                  <div className="flex items-center mb-3">
+                    <div className={`w-10 h-10 bg-gradient-to-br ${vendorColors[vendor.name]} rounded-lg flex items-center justify-center text-white font-bold text-sm mr-3`}>
+                      {vendor.name[0]}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-medium text-gray-900 truncate" data-testid={`text-vendor-name-${vendor.id}`}>
+                        {vendor.name}
+                      </h3>
+                      <p className="text-xs text-gray-500" data-testid={`text-product-count-${vendor.id}`}>
+                        {vendor.productCount} products
+                      </p>
+                    </div>
+                    <Badge 
+                      variant={vendor.growth >= 0 ? "default" : "destructive"}
+                      className={`text-xs ${vendor.growth >= 0 ? "bg-green-100 text-green-800" : ""}`}
+                      data-testid={`badge-growth-${vendor.id}`}
+                    >
+                      {vendor.growth >= 0 ? "+" : ""}{vendor.growth.toFixed(1)}%
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="text-gray-500 block">Revenue</span>
+                      <span className="font-medium text-gray-900" data-testid={`text-revenue-${vendor.id}`}>
+                        ${vendor.revenue.toLocaleString()}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block">AOV</span>
+                      <span className="font-medium text-gray-900" data-testid={`text-aov-${vendor.id}`}>
+                        ${vendor.aov.toFixed(2)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block">Conversion</span>
+                      <span className="font-medium text-gray-900" data-testid={`text-conversion-${vendor.id}`}>
+                        {vendor.conversion.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block">Visitors</span>
+                      <span className="font-medium text-gray-900" data-testid={`text-visitors-${vendor.id}`}>
+                        {vendor.visitors.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            {/* Desktop Table View - Hidden on mobile */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleSort("name")}
+                      data-testid="header-vendor-name"
+                    >
+                      <div className="flex items-center justify-between">
+                        Vendor
+                        {getSortIcon("name")}
+                      </div>
+                    </th>
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleSort("revenue")}
+                      data-testid="header-revenue"
+                    >
+                      <div className="flex items-center justify-between">
+                        Revenue
+                        {getSortIcon("revenue")}
+                      </div>
+                    </th>
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleSort("aov")}
+                      data-testid="header-aov"
+                    >
+                      <div className="flex items-center justify-between">
+                        AOV
+                        {getSortIcon("aov")}
+                      </div>
+                    </th>
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleSort("conversion")}
+                      data-testid="header-conversion"
+                    >
+                      <div className="flex items-center justify-between">
+                        Conversion
+                        {getSortIcon("conversion")}
+                      </div>
+                    </th>
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleSort("visitors")}
+                      data-testid="header-visitors"
+                    >
+                      <div className="flex items-center justify-between">
+                        Visitors
+                        {getSortIcon("visitors")}
+                      </div>
+                    </th>
+                    <th 
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                      onClick={() => handleSort("growth")}
+                      data-testid="header-growth"
+                    >
+                      <div className="flex items-center justify-between">
+                        Growth
+                        {getSortIcon("growth")}
+                      </div>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredVendors.map((vendor) => (
+                    <tr 
+                      key={vendor.id} 
+                      className="hover:bg-gray-50 cursor-pointer transition-colors duration-200" 
+                      data-testid={`row-vendor-${vendor.id}`}
+                      onClick={() => handleVendorClick(vendor)}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className={`w-8 h-8 bg-gradient-to-br ${vendorColors[vendor.name]} rounded-lg flex items-center justify-center text-white font-bold text-sm`}>
+                            {vendor.name[0]}
+                          </div>
+                          <div className="ml-3">
+                            <div className="text-sm font-medium text-gray-900 hover:text-brand-600 transition-colors" data-testid={`text-vendor-name-${vendor.id}`}>
+                              {vendor.name}
+                            </div>
+                            <div className="text-sm text-gray-500" data-testid={`text-product-count-${vendor.id}`}>
+                              {vendor.productCount} products • Click for details
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900" data-testid={`text-revenue-${vendor.id}`}>
+                        ${vendor.revenue.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900" data-testid={`text-aov-${vendor.id}`}>
+                        ${vendor.aov.toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900" data-testid={`text-conversion-${vendor.id}`}>
+                        {vendor.conversion.toFixed(1)}%
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900" data-testid={`text-visitors-${vendor.id}`}>
+                        {vendor.visitors.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Badge 
+                          variant={vendor.growth >= 0 ? "default" : "destructive"}
+                          className={vendor.growth >= 0 ? "bg-green-100 text-green-800 hover:bg-green-200" : ""}
+                          data-testid={`badge-growth-${vendor.id}`}
+                        >
+                          {vendor.growth >= 0 ? "+" : ""}{vendor.growth.toFixed(1)}%
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+        
+        
+        {/* Pagination Controls - Only show for non-infinite scroll mode */}
+        {paginationData && !useInfiniteScroll && (
+          <DataPagination
+            pagination={paginationData}
+            onPageChange={handlePageChange}
+            onLimitChange={handleLimitChange}
+            showSizeSelector={true}
+            showInfo={true}
+            isLoading={isLoading}
+            className="mt-6"
+          />
+        )}
+        
+        {/* Infinite scroll info */}
+        {useInfiniteScroll && effectiveVirtualization && (
+          <div className="mt-6 text-center text-sm text-gray-500">
+            Scroll to load more vendors automatically
+          </div>
+        )}
       </CardContent>
 
       {/* Vendor Detail Modal */}

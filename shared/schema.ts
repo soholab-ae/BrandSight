@@ -207,3 +207,40 @@ export type VendorAnalytics = typeof vendorAnalytics.$inferSelect;
 export type InsertVendorAnalytics = z.infer<typeof insertVendorAnalyticsSchema>;
 
 export type PageAnalytics = typeof pageAnalytics.$inferSelect;
+
+// Pagination types
+export interface PaginationParams {
+  page?: number;
+  limit?: number;
+  cursor?: string;
+  sortBy?: string;
+  sortDirection?: 'asc' | 'desc';
+  search?: string;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+    nextCursor?: string;
+    prevCursor?: string;
+  };
+}
+
+// Vendor metrics for optimized queries
+export interface VendorMetrics {
+  id: string;
+  name: string;
+  productCount: number;
+  revenue: number;
+  aov: number;
+  conversion: number;
+  visitors: number;
+  growth: number;
+  totalOrders: number;
+}
