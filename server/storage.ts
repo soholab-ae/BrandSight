@@ -22,6 +22,9 @@ import {
   type VendorAnalytics,
   type InsertVendorAnalytics,
   type PageAnalytics,
+  type PaginationParams,
+  type PaginatedResponse,
+  type VendorMetrics,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, gte, lte, desc, sql, asc } from "drizzle-orm";
@@ -47,15 +50,19 @@ export interface IStorage {
   getStoreByDomain(domain: string): Promise<Store | undefined>;
   updateStore(id: string, updates: Partial<Store>): Promise<Store>;
   
-  // Vendor operations
+  // Vendor operations (with pagination)
   getStoreVendors(storeId: string): Promise<Vendor[]>;
+  getStoreVendorsPaginated(storeId: string, params: PaginationParams): Promise<PaginatedResponse<Vendor>>;
+  getStoreVendorMetrics(storeId: string, params: PaginationParams): Promise<PaginatedResponse<VendorMetrics>>;
   createVendor(vendor: InsertVendor): Promise<Vendor>;
   getVendor(id: string): Promise<Vendor | undefined>;
   
-  // Product operations
+  // Product operations (with pagination)
   upsertProduct(product: InsertProduct): Promise<Product>;
   bulkUpsertProducts(products: InsertProduct[]): Promise<Product[]>;
   getVendorProducts(vendorId: string): Promise<Product[]>;
+  getVendorProductsPaginated(vendorId: string, params: PaginationParams): Promise<PaginatedResponse<Product>>;
+  getStoreProducts(storeId: string, params: PaginationParams): Promise<PaginatedResponse<Product>>;
   
   // Order operations
   upsertOrder(order: InsertOrder): Promise<Order>;
@@ -66,8 +73,10 @@ export interface IStorage {
   // Analytics operations
   upsertVendorAnalytics(analytics: InsertVendorAnalytics): Promise<VendorAnalytics>;
   getVendorAnalytics(storeId: string, vendorId?: string, startDate?: Date, endDate?: Date): Promise<VendorAnalytics[]>;
+  getVendorAnalyticsPaginated(storeId: string, params: PaginationParams & { vendorId?: string; startDate?: Date; endDate?: Date }): Promise<PaginatedResponse<VendorAnalytics>>;
   getVendorSummary(storeId: string, vendorId?: string, startDate?: Date, endDate?: Date): Promise<any>;
   getTopProducts(storeId: string, vendorId?: string, limit?: number): Promise<any[]>;
+  getTopProductsPaginated(storeId: string, params: PaginationParams & { vendorId?: string }): Promise<PaginatedResponse<any>>;
   getTopLandingPages(storeId: string, vendorId?: string, limit?: number): Promise<PageAnalytics[]>;
   getVendorOrdersInDateRange(storeId: string, vendorId: string, startDate: Date, endDate: Date): Promise<Order[]>;
   getVendorOrderItemsInDateRange(storeId: string, vendorId: string, startDate: Date, endDate: Date): Promise<OrderLineItem[]>;
@@ -141,6 +150,147 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(vendors).where(eq(vendors.storeId, storeId));
   }
 
+  async getStoreVendorsPaginated(storeId: string, params: PaginationParams): Promise<PaginatedResponse<Vendor>> {
+    const { page = 1, limit = 50, sortBy = 'name', sortDirection = 'asc', search } = params;
+    const offset = (page - 1) * limit;
+
+    // Return demo vendors for demo store with pagination
+    if (storeId === 'demo_store_1') {
+      let filteredVendors = [...demoVendors];
+      
+      if (search) {
+        filteredVendors = filteredVendors.filter(v => 
+          v.name.toLowerCase().includes(search.toLowerCase())
+        );
+      }
+      
+      // Sort vendors
+      filteredVendors.sort((a, b) => {
+        const aValue = a[sortBy as keyof Vendor] as string;
+        const bValue = b[sortBy as keyof Vendor] as string;
+        const comparison = aValue.localeCompare(bValue);
+        return sortDirection === 'asc' ? comparison : -comparison;
+      });
+      
+      const total = filteredVendors.length;
+      const paginatedData = filteredVendors.slice(offset, offset + limit);
+      
+      return {
+        data: paginatedData,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasNext: offset + limit < total,
+          hasPrev: page > 1
+        }
+      };
+    }
+
+    let query = db.select().from(vendors).where(eq(vendors.storeId, storeId));
+    let countQuery = db.select({ count: sql<number>`count(*)` }).from(vendors).where(eq(vendors.storeId, storeId));
+
+    // Apply search filter
+    if (search) {
+      const searchCondition = sql`${vendors.name} ILIKE ${'%' + search + '%'}`;
+      query = query.where(and(eq(vendors.storeId, storeId), searchCondition));
+      countQuery = countQuery.where(and(eq(vendors.storeId, storeId), searchCondition));
+    }
+
+    // Apply sorting
+    if (sortBy === 'name') {
+      query = query.orderBy(sortDirection === 'asc' ? asc(vendors.name) : desc(vendors.name));
+    } else if (sortBy === 'createdAt') {
+      query = query.orderBy(sortDirection === 'asc' ? asc(vendors.createdAt) : desc(vendors.createdAt));
+    }
+
+    // Apply pagination
+    query = query.limit(limit).offset(offset);
+
+    const [data, [{ count: total }]] = await Promise.all([
+      query,
+      countQuery
+    ]);
+
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: offset + limit < total,
+        hasPrev: page > 1
+      }
+    };
+  }
+
+  async getStoreVendorMetrics(storeId: string, params: PaginationParams): Promise<PaginatedResponse<VendorMetrics>> {
+    const { page = 1, limit = 50, sortBy = 'revenue', sortDirection = 'desc', search } = params;
+    const offset = (page - 1) * limit;
+
+    // Return demo vendor metrics for demo store
+    if (storeId === 'demo_store_1') {
+      const vendorMetrics: VendorMetrics[] = demoVendors.map(vendor => ({
+        id: vendor.id,
+        name: vendor.name,
+        productCount: Math.floor(Math.random() * 100 + 10),
+        revenue: Math.floor(Math.random() * 100000 + 10000),
+        aov: Math.floor(Math.random() * 200 + 50),
+        conversion: Math.random() * 5 + 1,
+        visitors: Math.floor(Math.random() * 10000 + 1000),
+        growth: Math.random() * 50 - 10,
+        totalOrders: Math.floor(Math.random() * 500 + 50)
+      }));
+
+      let filteredMetrics = [...vendorMetrics];
+      
+      if (search) {
+        filteredMetrics = filteredMetrics.filter(v => 
+          v.name.toLowerCase().includes(search.toLowerCase())
+        );
+      }
+      
+      // Sort metrics
+      filteredMetrics.sort((a, b) => {
+        const aValue = a[sortBy as keyof VendorMetrics] as number;
+        const bValue = b[sortBy as keyof VendorMetrics] as number;
+        const comparison = aValue - bValue;
+        return sortDirection === 'asc' ? comparison : -comparison;
+      });
+      
+      const total = filteredMetrics.length;
+      const paginatedData = filteredMetrics.slice(offset, offset + limit);
+      
+      return {
+        data: paginatedData,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasNext: offset + limit < total,
+          hasPrev: page > 1
+        }
+      };
+    }
+
+    // TODO: Implement real vendor metrics calculation from database
+    // For now, return empty result for non-demo stores
+    return {
+      data: [],
+      pagination: {
+        page,
+        limit,
+        total: 0,
+        totalPages: 0,
+        hasNext: false,
+        hasPrev: false
+      }
+    };
+  }
+
   async createVendor(vendor: InsertVendor): Promise<Vendor> {
     const [newVendor] = await db.insert(vendors).values(vendor).returning();
     return newVendor;
@@ -201,6 +351,159 @@ export class DatabaseStorage implements IStorage {
       return demoProducts.filter(p => p.vendorId === vendorId);
     }
     return await db.select().from(products).where(eq(products.vendorId, vendorId));
+  }
+
+  async getVendorProductsPaginated(vendorId: string, params: PaginationParams): Promise<PaginatedResponse<Product>> {
+    const { page = 1, limit = 50, sortBy = 'title', sortDirection = 'asc', search } = params;
+    const offset = (page - 1) * limit;
+
+    // Return demo products for demo vendor with pagination
+    if (vendorId.startsWith('vendor_')) {
+      let filteredProducts = demoProducts.filter(p => p.vendorId === vendorId);
+      
+      if (search) {
+        filteredProducts = filteredProducts.filter(p => 
+          p.title.toLowerCase().includes(search.toLowerCase())
+        );
+      }
+      
+      // Sort products
+      filteredProducts.sort((a, b) => {
+        const aValue = a[sortBy as keyof Product] as string;
+        const bValue = b[sortBy as keyof Product] as string;
+        const comparison = aValue.localeCompare(bValue);
+        return sortDirection === 'asc' ? comparison : -comparison;
+      });
+      
+      const total = filteredProducts.length;
+      const paginatedData = filteredProducts.slice(offset, offset + limit);
+      
+      return {
+        data: paginatedData,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasNext: offset + limit < total,
+          hasPrev: page > 1
+        }
+      };
+    }
+
+    let query = db.select().from(products).where(eq(products.vendorId, vendorId));
+    let countQuery = db.select({ count: sql<number>`count(*)` }).from(products).where(eq(products.vendorId, vendorId));
+
+    // Apply search filter
+    if (search) {
+      const searchCondition = sql`${products.title} ILIKE ${'%' + search + '%'}`;
+      query = query.where(and(eq(products.vendorId, vendorId), searchCondition));
+      countQuery = countQuery.where(and(eq(products.vendorId, vendorId), searchCondition));
+    }
+
+    // Apply sorting
+    if (sortBy === 'title') {
+      query = query.orderBy(sortDirection === 'asc' ? asc(products.title) : desc(products.title));
+    } else if (sortBy === 'price') {
+      query = query.orderBy(sortDirection === 'asc' ? asc(products.price) : desc(products.price));
+    }
+
+    query = query.limit(limit).offset(offset);
+
+    const [data, [{ count: total }]] = await Promise.all([
+      query,
+      countQuery
+    ]);
+
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: offset + limit < total,
+        hasPrev: page > 1
+      }
+    };
+  }
+
+  async getStoreProducts(storeId: string, params: PaginationParams): Promise<PaginatedResponse<Product>> {
+    const { page = 1, limit = 50, sortBy = 'title', sortDirection = 'asc', search } = params;
+    const offset = (page - 1) * limit;
+
+    // Return demo products for demo store with pagination
+    if (storeId === 'demo_store_1') {
+      let filteredProducts = [...demoProducts];
+      
+      if (search) {
+        filteredProducts = filteredProducts.filter(p => 
+          p.title.toLowerCase().includes(search.toLowerCase()) ||
+          p.vendor?.toLowerCase().includes(search.toLowerCase())
+        );
+      }
+      
+      // Sort products
+      filteredProducts.sort((a, b) => {
+        const aValue = a[sortBy as keyof Product] as string;
+        const bValue = b[sortBy as keyof Product] as string;
+        const comparison = aValue.localeCompare(bValue);
+        return sortDirection === 'asc' ? comparison : -comparison;
+      });
+      
+      const total = filteredProducts.length;
+      const paginatedData = filteredProducts.slice(offset, offset + limit);
+      
+      return {
+        data: paginatedData,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasNext: offset + limit < total,
+          hasPrev: page > 1
+        }
+      };
+    }
+
+    let query = db.select().from(products).where(eq(products.storeId, storeId));
+    let countQuery = db.select({ count: sql<number>`count(*)` }).from(products).where(eq(products.storeId, storeId));
+
+    // Apply search filter
+    if (search) {
+      const searchCondition = sql`${products.title} ILIKE ${'%' + search + '%'} OR ${products.vendor} ILIKE ${'%' + search + '%'}`;
+      query = query.where(and(eq(products.storeId, storeId), searchCondition));
+      countQuery = countQuery.where(and(eq(products.storeId, storeId), searchCondition));
+    }
+
+    // Apply sorting
+    if (sortBy === 'title') {
+      query = query.orderBy(sortDirection === 'asc' ? asc(products.title) : desc(products.title));
+    } else if (sortBy === 'price') {
+      query = query.orderBy(sortDirection === 'asc' ? asc(products.price) : desc(products.price));
+    } else if (sortBy === 'vendor') {
+      query = query.orderBy(sortDirection === 'asc' ? asc(products.vendor) : desc(products.vendor));
+    }
+
+    query = query.limit(limit).offset(offset);
+
+    const [data, [{ count: total }]] = await Promise.all([
+      query,
+      countQuery
+    ]);
+
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: offset + limit < total,
+        hasPrev: page > 1
+      }
+    };
   }
 
   // Order operations
@@ -289,6 +592,100 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return result;
+  }
+
+  async getVendorAnalyticsPaginated(
+    storeId: string,
+    params: PaginationParams & { vendorId?: string; startDate?: Date; endDate?: Date }
+  ): Promise<PaginatedResponse<VendorAnalytics>> {
+    const { page = 1, limit = 50, sortBy = 'date', sortDirection = 'desc', vendorId, startDate, endDate } = params;
+    const offset = (page - 1) * limit;
+
+    // Return demo analytics for demo store with pagination
+    if (storeId === 'demo_store_1') {
+      let analytics = [...demoVendorAnalytics];
+      
+      if (vendorId) {
+        analytics = analytics.filter(a => a.vendorId === vendorId);
+      }
+      
+      if (startDate && endDate) {
+        analytics = analytics.filter(a => {
+          const date = a.date;
+          return date >= startDate && date <= endDate;
+        });
+      }
+      
+      // Sort analytics
+      analytics.sort((a, b) => {
+        if (sortBy === 'date') {
+          const comparison = a.date.getTime() - b.date.getTime();
+          return sortDirection === 'asc' ? comparison : -comparison;
+        }
+        const aValue = a[sortBy as keyof VendorAnalytics] as number;
+        const bValue = b[sortBy as keyof VendorAnalytics] as number;
+        const comparison = aValue - bValue;
+        return sortDirection === 'asc' ? comparison : -comparison;
+      });
+      
+      const total = analytics.length;
+      const paginatedData = analytics.slice(offset, offset + limit);
+      
+      return {
+        data: paginatedData,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasNext: offset + limit < total,
+          hasPrev: page > 1
+        }
+      };
+    }
+    
+    const conditions = [eq(vendorAnalytics.storeId, storeId)];
+    
+    if (vendorId) {
+      conditions.push(eq(vendorAnalytics.vendorId, vendorId));
+    }
+    
+    if (startDate) {
+      conditions.push(gte(vendorAnalytics.date, startDate));
+    }
+    
+    if (endDate) {
+      conditions.push(lte(vendorAnalytics.date, endDate));
+    }
+    
+    let query = db.select().from(vendorAnalytics).where(and(...conditions));
+    let countQuery = db.select({ count: sql<number>`count(*)` }).from(vendorAnalytics).where(and(...conditions));
+    
+    // Apply sorting
+    if (sortBy === 'date') {
+      query = query.orderBy(sortDirection === 'asc' ? asc(vendorAnalytics.date) : desc(vendorAnalytics.date));
+    } else if (sortBy === 'revenue') {
+      query = query.orderBy(sortDirection === 'asc' ? asc(vendorAnalytics.revenue) : desc(vendorAnalytics.revenue));
+    }
+    
+    query = query.limit(limit).offset(offset);
+    
+    const [data, [{ count: total }]] = await Promise.all([
+      query,
+      countQuery
+    ]);
+    
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: offset + limit < total,
+        hasPrev: page > 1
+      }
+    };
   }
 
   async getVendorAnalytics(
@@ -414,6 +811,113 @@ export class DatabaseStorage implements IStorage {
       .where(and(...conditions));
 
     return summary;
+  }
+
+  async getTopProductsPaginated(
+    storeId: string,
+    params: PaginationParams & { vendorId?: string }
+  ): Promise<PaginatedResponse<any>> {
+    const { page = 1, limit = 50, sortBy = 'totalRevenue', sortDirection = 'desc', vendorId } = params;
+    const offset = (page - 1) * limit;
+
+    // Calculate top products from demo data with pagination
+    if (storeId === 'demo_store_1') {
+      const productStats = new Map<string, any>();
+      
+      demoOrders.forEach(order => {
+        const lineItems = getDemoOrderLineItems(order.id);
+        lineItems.forEach(item => {
+          if (!vendorId || item.vendorId === vendorId) {
+            const key = item.productId!;
+            const existing = productStats.get(key) || {
+              productId: item.productId,
+              title: item.title,
+              vendor: item.vendor,
+              totalRevenue: 0,
+              totalQuantity: 0
+            };
+            
+            existing.totalRevenue += parseFloat(item.price || "0") * (item.quantity || 1);
+            existing.totalQuantity += item.quantity || 1;
+            productStats.set(key, existing);
+          }
+        });
+      });
+      
+      let products = Array.from(productStats.values());
+      
+      // Sort products
+      products.sort((a, b) => {
+        const aValue = a[sortBy] as number;
+        const bValue = b[sortBy] as number;
+        const comparison = aValue - bValue;
+        return sortDirection === 'asc' ? comparison : -comparison;
+      });
+      
+      const total = products.length;
+      const paginatedData = products.slice(offset, offset + limit);
+      
+      return {
+        data: paginatedData,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasNext: offset + limit < total,
+          hasPrev: page > 1
+        }
+      };
+    }
+    
+    const conditions = [eq(orders.storeId, storeId)];
+    
+    if (vendorId) {
+      conditions.push(eq(orderLineItems.vendorId, vendorId));
+    }
+    
+    const query = db
+      .select({
+        productId: orderLineItems.productId,
+        title: orderLineItems.title,
+        vendor: orderLineItems.vendor,
+        totalRevenue: sql<number>`SUM(${orderLineItems.price} * ${orderLineItems.quantity})`,
+        totalQuantity: sql<number>`SUM(${orderLineItems.quantity})`,
+      })
+      .from(orderLineItems)
+      .innerJoin(orders, eq(orders.id, orderLineItems.orderId))
+      .where(and(...conditions))
+      .groupBy(orderLineItems.productId, orderLineItems.title, orderLineItems.vendor);
+      
+    // Apply sorting
+    if (sortBy === 'totalRevenue') {
+      query.orderBy(sortDirection === 'asc' ? asc(sql`SUM(${orderLineItems.price} * ${orderLineItems.quantity})`) : desc(sql`SUM(${orderLineItems.price} * ${orderLineItems.quantity})`));
+    } else if (sortBy === 'totalQuantity') {
+      query.orderBy(sortDirection === 'asc' ? asc(sql`SUM(${orderLineItems.quantity})`) : desc(sql`SUM(${orderLineItems.quantity})`));
+    }
+    
+    const countQuery = db
+      .select({ count: sql<number>`COUNT(DISTINCT ${orderLineItems.productId})` })
+      .from(orderLineItems)
+      .innerJoin(orders, eq(orders.id, orderLineItems.orderId))
+      .where(and(...conditions));
+    
+    const [data, [{ count: total }]] = await Promise.all([
+      query.limit(limit).offset(offset),
+      countQuery
+    ]);
+    
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: offset + limit < total,
+        hasPrev: page > 1
+      }
+    };
   }
 
   async getTopProducts(

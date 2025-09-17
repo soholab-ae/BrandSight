@@ -6,19 +6,32 @@ import AppHeader from "@/components/AppHeader";
 import Sidebar from "@/components/Sidebar";
 import DateRangePicker from "@/components/DateRangePicker";
 import MetricsGrid from "@/components/MetricsGrid";
-import VendorPerformanceChart from "@/components/VendorPerformanceChart";
-import TopProducts from "@/components/TopProducts";
-import VendorComparisonTable from "@/components/VendorComparisonTable";
-import LandingPagesAnalysis from "@/components/LandingPagesAnalysis";
-import ReferralSources from "@/components/ReferralSources";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { RefreshCw, Download, InfoIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
+// Lazy-loaded components for progressive loading
+import {
+  LazyVendorPerformanceChart,
+  LazyVendorComparisonTable,
+  LazyTopProducts,
+  LazyLandingPagesAnalysis,
+  LazyReferralSources
+} from "@/components/LazyComponents";
+import LazyWrapper from "@/components/LazyWrapper";
+
+// Performance monitoring hooks
+import { usePerformanceMonitor, useMemoryStats, useDatasetOptimization } from "@/hooks/use-performance";
+
 export default function Dashboard() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading } = useAuth();
+  
+  // Performance monitoring
+  usePerformanceMonitor('Dashboard');
+  useMemoryStats();
+  const { clearCache, performCleanup } = useDatasetOptimization();
   
   // Check if using demo data
   const { data: stores } = useQuery({
@@ -165,27 +178,69 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* Key Metrics Cards */}
+          {/* Key Metrics Cards - Load immediately for key metrics */}
           <MetricsGrid />
 
-          {/* Interactive Performance Chart */}
+          {/* Interactive Performance Chart - Progressive loading */}
           <div className="mb-6 sm:mb-8">
-            <VendorPerformanceChart dateRange={dateRange} />
+            <LazyWrapper 
+              fallbackType="chart"
+              minHeight="400px" 
+              rootMargin="100px"
+              skeletonProps={{ height: "h-80" }}
+              data-testid="vendor-performance-chart-wrapper"
+            >
+              <LazyVendorPerformanceChart dateRange={dateRange} />
+            </LazyWrapper>
           </div>
 
-          {/* Top Products Card */}
+          {/* Top Products Card - Progressive loading */}
           <div className="mb-6 sm:mb-8">
-            <TopProducts />
+            <LazyWrapper 
+              fallbackType="cards"
+              minHeight="300px" 
+              rootMargin="150px"
+              skeletonProps={{ count: 3, columns: 1, hasImages: true }}
+              data-testid="top-products-wrapper"
+            >
+              <LazyTopProducts />
+            </LazyWrapper>
           </div>
 
-          {/* Vendor Comparison Table */}
-          <VendorComparisonTable dateRange={dateRange} />
+          {/* Vendor Comparison Table - Progressive loading with virtualization */}
+          <LazyWrapper 
+            fallbackType="virtualized"
+            minHeight="500px" 
+            rootMargin="200px"
+            className="mb-6 sm:mb-8"
+            skeletonProps={{ height: 500, itemHeight: 73 }}
+            data-testid="vendor-comparison-table-wrapper"
+          >
+            <LazyVendorComparisonTable dateRange={dateRange} />
+          </LazyWrapper>
 
-          {/* Top Referral Sources */}
-          <ReferralSources />
+          {/* Top Referral Sources - Progressive loading */}
+          <LazyWrapper 
+            fallbackType="table"
+            minHeight="400px" 
+            rootMargin="250px"
+            className="mb-6 sm:mb-8"
+            skeletonProps={{ rows: 6, columns: 5, showSearch: false, showFilters: false }}
+            data-testid="referral-sources-wrapper"
+          >
+            <LazyReferralSources />
+          </LazyWrapper>
 
-          {/* Landing Pages Analysis */}
-          <LandingPagesAnalysis />
+          {/* Landing Pages Analysis - Progressive loading */}
+          <LazyWrapper 
+            fallbackType="cards"
+            minHeight="400px" 
+            rootMargin="300px"
+            skeletonProps={{ count: 4, columns: 2, hasImages: false }}
+            data-testid="landing-pages-analysis-wrapper"
+          >
+            <LazyLandingPagesAnalysis />
+          </LazyWrapper>
           </main>
         </div>
       </div>

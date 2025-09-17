@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { MemoryOptimizer } from "@/lib/memory-optimization";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -38,7 +39,19 @@ export const getQueryFn: <T>(options: {
     }
 
     await throwIfResNotOk(res);
-    return await res.json();
+    const data = await res.json();
+    
+    // Memory optimization: trigger cleanup for large datasets
+    if (typeof window !== 'undefined' && data && Array.isArray(data) && data.length > 100) {
+      setTimeout(() => {
+        const memoryStats = MemoryOptimizer.getMemoryStats();
+        if (memoryStats.cacheSize > 10 * 1024 * 1024) { // 10MB threshold
+          MemoryOptimizer.performCleanup();
+        }
+      }, 1000);
+    }
+    
+    return data;
   };
 
 export const queryClient = new QueryClient({
@@ -47,11 +60,19 @@ export const queryClient = new QueryClient({
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
       refetchOnWindowFocus: false,
-      staleTime: Infinity,
+      staleTime: 2 * 60 * 1000, // 2 minutes for memory optimization
+      gcTime: 5 * 60 * 1000, // 5 minutes cache time (was cacheTime)
       retry: false,
     },
     mutations: {
       retry: false,
+      gcTime: 0, // Clear failed mutations quickly
     },
   },
 });
+
+// Initialize memory optimization after QueryClient creation
+if (typeof window !== 'undefined') {
+  MemoryOptimizer.initialize();
+  MemoryOptimizer.optimizeQueryCache();
+}

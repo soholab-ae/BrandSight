@@ -6,6 +6,192 @@ import { shopifyService } from "./services/shopifyService";
 import { insertStoreSchema } from "@shared/schema";
 import { createBillingSubscription, checkActiveSubscription, cancelSubscription } from "./shopifyBilling";
 import { cacheService, CacheKeyBuilder } from "./services/cacheService";
+import * as csv from 'fast-csv';
+import * as XLSX from 'xlsx';
+import archiver from 'archiver';
+import type { Response } from "express";
+
+// Streaming export functions
+async function streamVendorCSVExport(
+  storeId: string,
+  params: { sortBy: string; sortDirection: 'asc' | 'desc'; search?: string },
+  res: Response,
+  dateRange?: string
+) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      // Create CSV stream
+      const csvStream = csv.format({ headers: true });
+      csvStream.pipe(res);
+      
+      // Add metadata header if dateRange provided
+      if (dateRange) {
+        csvStream.write({
+          'Vendor Name': `Vendor Analytics Report - ${dateRange}`,
+          'Revenue ($)': '',
+          'Average Order Value ($)': '',
+          'Conversion Rate (%)': '',
+          'Visitors': '',
+          'Product Count': '',
+          'Growth Rate (%)': ''
+        });
+        csvStream.write({
+          'Vendor Name': `Generated on: ${new Date().toLocaleDateString()}`,
+          'Revenue ($)': '',
+          'Average Order Value ($)': '',
+          'Conversion Rate (%)': '',
+          'Visitors': '',
+          'Product Count': '',
+          'Growth Rate (%)': ''
+        });
+        csvStream.write({
+          'Vendor Name': '',
+          'Revenue ($)': '',
+          'Average Order Value ($)': '',
+          'Conversion Rate (%)': '',
+          'Visitors': '',
+          'Product Count': '',
+          'Growth Rate (%)': ''
+        });
+      }
+      
+      // Stream data in batches to avoid memory issues
+      let currentPage = 1;
+      const batchSize = 100;
+      let hasMoreData = true;
+      
+      while (hasMoreData) {
+        const result = await storage.getStoreVendorMetrics(storeId, {
+          page: currentPage,
+          limit: batchSize,
+          sortBy: params.sortBy,
+          sortDirection: params.sortDirection,
+          search: params.search
+        });
+        
+        // Write batch data to CSV
+        for (const vendor of result.data) {
+          csvStream.write({
+            'Vendor Name': vendor.name,
+            'Revenue ($)': vendor.revenue,
+            'Average Order Value ($)': vendor.aov.toFixed(2),
+            'Conversion Rate (%)': vendor.conversion.toFixed(1),
+            'Visitors': vendor.visitors,
+            'Product Count': vendor.productCount,
+            'Growth Rate (%)': vendor.growth.toFixed(1)
+          });
+        }
+        
+        hasMoreData = result.pagination.hasNext;
+        currentPage++;
+      }
+      
+      csvStream.end();
+      csvStream.on('end', resolve);
+      csvStream.on('error', reject);
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+async function streamVendorExcelExport(
+  storeId: string,
+  params: { sortBy: string; sortDirection: 'asc' | 'desc'; search?: string },
+  res: Response,
+  dateRange?: string
+) {
+  try {
+    // For Excel, we need to collect all data first, then generate the file
+    // In a production environment, you might want to use streaming Excel libraries
+    const allVendors: any[] = [];
+    let currentPage = 1;
+    const batchSize = 100;
+    let hasMoreData = true;
+    
+    // Collect all data in batches
+    while (hasMoreData) {
+      const result = await storage.getStoreVendorMetrics(storeId, {
+        page: currentPage,
+        limit: batchSize,
+        sortBy: params.sortBy,
+        sortDirection: params.sortDirection,
+        search: params.search
+      });
+      
+      allVendors.push(...result.data);
+      hasMoreData = result.pagination.hasNext;
+      currentPage++;
+    }
+    
+    // Create workbook
+    const workbook = XLSX.utils.book_new();
+    
+    // Format data for Excel
+    const formattedData = allVendors.map(vendor => ({
+      'Vendor Name': vendor.name,
+      'Revenue ($)': vendor.revenue,
+      'Average Order Value ($)': parseFloat(vendor.aov.toFixed(2)),
+      'Conversion Rate (%)': parseFloat(vendor.conversion.toFixed(1)),
+      'Visitors': vendor.visitors,
+      'Product Count': vendor.productCount,
+      'Growth Rate (%)': parseFloat(vendor.growth.toFixed(1))
+    }));
+    
+    // Create main data worksheet
+    const worksheet = XLSX.utils.aoa_to_sheet([]);
+    
+    if (dateRange) {
+      // Add metadata
+      XLSX.utils.sheet_add_aoa(worksheet, [
+        [`Vendor Analytics Report - ${dateRange}`],
+        [`Generated on: ${new Date().toLocaleDateString()}`],
+        [`Total Vendors: ${allVendors.length}`],
+        [] // Empty row
+      ], { origin: 'A1' });
+      
+      // Add data starting from A5
+      XLSX.utils.sheet_add_json(worksheet, formattedData, { origin: 'A5', skipHeader: false });
+    } else {
+      XLSX.utils.sheet_add_json(worksheet, formattedData, { origin: 'A1', skipHeader: false });
+    }
+    
+    // Auto-size columns
+    const colWidths = [
+      { wch: 20 }, // Vendor Name
+      { wch: 15 }, // Revenue
+      { wch: 18 }, // AOV
+      { wch: 15 }, // Conversion Rate
+      { wch: 12 }, // Visitors
+      { wch: 12 }, // Product Count
+      { wch: 12 }  // Growth Rate
+    ];
+    worksheet['!cols'] = colWidths;
+    
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Vendor Analytics');
+    
+    // Create summary worksheet
+    const summaryData = [
+      ['Summary Statistics', '', ''],
+      ['Total Vendors', allVendors.length, ''],
+      ['Total Revenue', allVendors.reduce((sum, v) => sum + v.revenue, 0), '$'],
+      ['Average AOV', (allVendors.reduce((sum, v) => sum + v.aov, 0) / allVendors.length).toFixed(2), '$'],
+      ['Average Conversion Rate', (allVendors.reduce((sum, v) => sum + v.conversion, 0) / allVendors.length).toFixed(1), '%'],
+      ['Top Revenue Vendor', allVendors.sort((a, b) => b.revenue - a.revenue)[0]?.name || 'N/A', ''],
+      ['Highest Growth Vendor', allVendors.sort((a, b) => b.growth - a.growth)[0]?.name || 'N/A', '']
+    ];
+    
+    const summaryWorksheet = XLSX.utils.aoa_to_sheet(summaryData);
+    summaryWorksheet['!cols'] = [{ wch: 20 }, { wch: 15 }, { wch: 5 }];
+    XLSX.utils.book_append_sheet(workbook, summaryWorksheet, 'Summary');
+    
+    // Write to response stream
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    res.send(buffer);
+  } catch (error) {
+    throw error;
+  }
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware - support both Replit and Shopify auth
@@ -388,6 +574,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/stores/current/vendors', authenticateOrDemo, async (req: any, res) => {
     try {
       const store = await getUserCurrentStore(req);
+      const { page, limit, sortBy, sortDirection, search, paginated } = req.query;
+      
+      // Check if pagination is requested
+      if (paginated === 'true') {
+        const paginationParams = {
+          page: page ? parseInt(page as string) : 1,
+          limit: limit ? parseInt(limit as string) : 50,
+          sortBy: sortBy as string || 'name',
+          sortDirection: (sortDirection as 'asc' | 'desc') || 'asc',
+          search: search as string
+        };
+        
+        const result = await storage.getStoreVendorsPaginated(store.id, paginationParams);
+        return res.json(result);
+      }
+      
       const cacheKey = CacheKeyBuilder.vendors(store.id);
       
       // Check cache first
@@ -409,6 +611,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "No stores found for user" });
       }
       res.status(500).json({ message: "Failed to fetch vendors" });
+    }
+  });
+
+  // Paginated vendor metrics endpoint
+  app.get('/api/stores/current/vendors/metrics', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const { page, limit, sortBy, sortDirection, search } = req.query;
+      
+      const paginationParams = {
+        page: page ? parseInt(page as string) : 1,
+        limit: limit ? parseInt(limit as string) : 50,
+        sortBy: sortBy as string || 'revenue',
+        sortDirection: (sortDirection as 'asc' | 'desc') || 'desc',
+        search: search as string
+      };
+      
+      const result = await storage.getStoreVendorMetrics(store.id, paginationParams);
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching vendor metrics:", error);
+      res.status(500).json({ message: "Failed to fetch vendor metrics" });
+    }
+  });
+
+  // Server-side CSV export for vendor metrics
+  app.get('/api/stores/current/vendors/export/csv', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const { search, sortBy, sortDirection, dateRange } = req.query;
+      
+      const exportParams = {
+        sortBy: sortBy as string || 'revenue',
+        sortDirection: (sortDirection as 'asc' | 'desc') || 'desc',
+        search: search as string
+      };
+      
+      // Set response headers for file download
+      const filename = `vendor-analytics-${dateRange || 'all'}-${new Date().toISOString().split('T')[0]}.csv`;
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Cache-Control', 'no-cache');
+      
+      // Stream CSV data
+      await streamVendorCSVExport(store.id, exportParams, res, dateRange as string);
+    } catch (error) {
+      console.error("Error exporting vendor CSV:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ message: "Failed to export vendor data" });
+      }
+    }
+  });
+
+  // Server-side Excel export for vendor metrics
+  app.get('/api/stores/current/vendors/export/excel', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const { search, sortBy, sortDirection, dateRange } = req.query;
+      
+      const exportParams = {
+        sortBy: sortBy as string || 'revenue',
+        sortDirection: (sortDirection as 'asc' | 'desc') || 'desc',
+        search: search as string
+      };
+      
+      // Set response headers for file download
+      const filename = `vendor-analytics-${dateRange || 'all'}-${new Date().toISOString().split('T')[0]}.xlsx`;
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Cache-Control', 'no-cache');
+      
+      // Stream Excel data
+      await streamVendorExcelExport(store.id, exportParams, res, dateRange as string);
+    } catch (error) {
+      console.error("Error exporting vendor Excel:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ message: "Failed to export vendor data" });
+      }
+    }
+  });
+
+  // Export job status endpoint for large exports
+  app.get('/api/stores/current/exports/:jobId/status', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const { jobId } = req.params;
+      // In a real implementation, you'd track export jobs in Redis or database
+      // For now, return a simple status
+      res.json({
+        jobId,
+        status: 'completed',
+        progress: 100,
+        downloadUrl: `/api/stores/current/exports/${jobId}/download`
+      });
+    } catch (error) {
+      console.error("Error checking export status:", error);
+      res.status(500).json({ message: "Failed to check export status" });
     }
   });
 
@@ -452,7 +750,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/stores/current/products/top', authenticateOrDemo, async (req: any, res) => {
     try {
       const store = await getUserCurrentStore(req);
-      const { vendorId, limit } = req.query;
+      const { vendorId, limit, page, sortBy, sortDirection, paginated } = req.query;
+      
+      // Check if pagination is requested
+      if (paginated === 'true') {
+        const paginationParams = {
+          page: page ? parseInt(page as string) : 1,
+          limit: limit ? parseInt(limit as string) : 50,
+          sortBy: sortBy as string || 'totalRevenue',
+          sortDirection: (sortDirection as 'asc' | 'desc') || 'desc',
+          vendorId: vendorId as string
+        };
+        
+        const result = await storage.getTopProductsPaginated(store.id, paginationParams);
+        return res.json(result);
+      }
+      
       const limitNum = limit ? parseInt(limit as string) : 10;
       
       const cacheKey = CacheKeyBuilder.topProducts(store.id, vendorId as string, limitNum);
@@ -480,6 +793,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "No stores found for user" });
       }
       res.status(500).json({ message: "Failed to fetch top products" });
+    }
+  });
+
+  // Paginated products endpoint
+  app.get('/api/stores/current/products', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const { page, limit, sortBy, sortDirection, search } = req.query;
+      
+      const paginationParams = {
+        page: page ? parseInt(page as string) : 1,
+        limit: limit ? parseInt(limit as string) : 50,
+        sortBy: sortBy as string || 'title',
+        sortDirection: (sortDirection as 'asc' | 'desc') || 'asc',
+        search: search as string
+      };
+      
+      const result = await storage.getStoreProducts(store.id, paginationParams);
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching store products:", error);
+      res.status(500).json({ message: "Failed to fetch products" });
+    }
+  });
+
+  // Paginated vendor analytics endpoint
+  app.get('/api/stores/current/analytics/paginated', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const { page, limit, sortBy, sortDirection, vendorId, startDate, endDate } = req.query;
+      
+      const start = startDate ? new Date(startDate as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const end = endDate ? new Date(endDate as string) : new Date();
+      
+      const paginationParams = {
+        page: page ? parseInt(page as string) : 1,
+        limit: limit ? parseInt(limit as string) : 50,
+        sortBy: sortBy as string || 'date',
+        sortDirection: (sortDirection as 'asc' | 'desc') || 'desc',
+        vendorId: vendorId as string,
+        startDate: start,
+        endDate: end
+      };
+      
+      const result = await storage.getVendorAnalyticsPaginated(store.id, paginationParams);
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching paginated analytics:", error);
+      res.status(500).json({ message: "Failed to fetch analytics" });
     }
   });
 
@@ -521,6 +883,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/stores/:storeId/vendors', authenticate, async (req: any, res) => {
     try {
       const { storeId } = req.params;
+      const { page, limit, sortBy, sortDirection, search, paginated } = req.query;
+      
+      // Check if pagination is requested
+      if (paginated === 'true') {
+        const paginationParams = {
+          page: page ? parseInt(page as string) : 1,
+          limit: limit ? parseInt(limit as string) : 50,
+          sortBy: sortBy as string || 'name',
+          sortDirection: (sortDirection as 'asc' | 'desc') || 'asc',
+          search: search as string
+        };
+        
+        const result = await storage.getStoreVendorsPaginated(storeId, paginationParams);
+        return res.json(result);
+      }
+      
       const cacheKey = CacheKeyBuilder.vendors(storeId);
       
       // Check cache first
