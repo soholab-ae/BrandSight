@@ -1,6 +1,7 @@
 import { storage } from "../storage";
 import type { Store, InsertProduct, InsertOrder, InsertOrderLineItem } from "@shared/schema";
 import { cacheService, CacheKeyBuilder } from "./cacheService";
+import { TokenEncryption } from "./tokenEncryption";
 
 // Rate limiting and retry configuration
 interface RateLimitState {
@@ -175,7 +176,7 @@ export class ShopifyService {
           this.retryConfig.baseDelay * Math.pow(2, retryCount)
         );
         
-        console.log(`Network error, retrying in ${retryDelay}ms (attempt ${retryCount + 1}/${this.retryConfig.maxRetries + 1}):`, error);
+        console.log(`Network error, retrying in ${retryDelay}ms (attempt ${retryCount + 1}/${this.retryConfig.maxRetries + 1}):`, TokenEncryption.sanitizeForLogging(error));
         
         retryCount++;
         await this.sleep(retryDelay);
@@ -314,7 +315,7 @@ export class ShopifyService {
       
       console.log(`Product sync completed: ${syncedCount} products ${isIncrementalSync ? 'updated' : 'synced'}`);
     } catch (error) {
-      console.error('Error syncing products:', error);
+      console.error('Error syncing products:', TokenEncryption.sanitizeForLogging(error));
       throw error;
     }
   }
@@ -439,7 +440,7 @@ export class ShopifyService {
       
       console.log(`Order sync completed: ${syncedCount} orders ${isIncrementalSync ? 'updated' : 'synced'}`);
     } catch (error) {
-      console.error('Error syncing orders:', error);
+      console.error('Error syncing orders:', TokenEncryption.sanitizeForLogging(error));
       throw error;
     }
   }
@@ -465,7 +466,7 @@ export class ShopifyService {
         });
       }
     } catch (error) {
-      console.error('Error generating analytics:', error);
+      console.error('Error generating analytics:', TokenEncryption.sanitizeForLogging(error));
       throw error;
     }
   }
@@ -502,10 +503,10 @@ export class ShopifyService {
         conversionRate: (conversionRate * 100).toFixed(4),
       };
       
-      console.log(`Analytics calculated for vendor ${vendorId}:`, analytics);
+      console.log(`Analytics calculated for vendor ${vendorId}:`, TokenEncryption.sanitizeForLogging(analytics));
       return analytics;
     } catch (error) {
-      console.error(`Error calculating vendor analytics for vendor ${vendorId}:`, error);
+      console.error(`Error calculating vendor analytics for vendor ${vendorId}:`, TokenEncryption.sanitizeForLogging(error));
       return {
         revenue: "0",
         orders: 0,
@@ -599,7 +600,7 @@ export class ShopifyService {
 
       console.log(`Successfully processed order webhook for order ${orderData.id}`);
     } catch (error) {
-      console.error(`Error handling order webhook for order ${orderData.id}:`, error);
+      console.error(`Error handling order webhook for order ${orderData.id}:`, TokenEncryption.sanitizeForLogging(error));
       throw error;
     }
   }
@@ -640,7 +641,7 @@ export class ShopifyService {
       
       console.log(`Successfully processed product webhook for product ${productData.id}`);
     } catch (error) {
-      console.error(`Error handling product webhook for product ${productData.id}:`, error);
+      console.error(`Error handling product webhook for product ${productData.id}:`, TokenEncryption.sanitizeForLogging(error));
       throw error;
     }
   }
@@ -662,7 +663,7 @@ export class ShopifyService {
       
       console.log(`Successfully processed customer webhook for customer ${customerData.id}`);
     } catch (error) {
-      console.error(`Error handling customer webhook for customer ${customerData.id}:`, error);
+      console.error(`Error handling customer webhook for customer ${customerData.id}:`, TokenEncryption.sanitizeForLogging(error));
       throw error;
     }
   }
@@ -672,7 +673,7 @@ export class ShopifyService {
       const { data } = await this.makeShopifyRequest(store, 'shop');
       return data.shop;
     } catch (error) {
-      console.error('Error getting shop info:', error);
+      console.error('Error getting shop info:', TokenEncryption.sanitizeForLogging(error));
       throw error;
     }
   }

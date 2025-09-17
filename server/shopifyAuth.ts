@@ -4,6 +4,7 @@ import { ApiVersion } from "@shopify/shopify-api";
 import express, { type Express } from "express";
 import crypto from "crypto";
 import { storage } from "./storage";
+import { TokenEncryption } from "./services/tokenEncryption";
 
 // Conditionally initialize Shopify App Configuration
 let shopify: any = null;
@@ -125,7 +126,7 @@ export const authenticateShopify = async (req: any, res: any, next: any) => {
     
     next();
   } catch (error) {
-    console.error("Shopify authentication error:", error);
+    console.error("Shopify authentication error:", TokenEncryption.sanitizeForLogging(error));
     res.status(401).json({ message: "Unauthorized" });
   }
 };
@@ -203,14 +204,14 @@ async function registerWebhooks(session: any) {
           console.log(`Successfully registered webhook for ${topic}:`, result.webhook?.id);
         } else {
           const error = await response.text();
-          console.error(`Failed to register webhook for ${topic}:`, error);
+          console.error(`Failed to register webhook for ${topic}:`, TokenEncryption.sanitizeForLogging(error));
         }
       } catch (error) {
-        console.error(`Error registering webhook for ${topic}:`, error);
+        console.error(`Error registering webhook for ${topic}:`, TokenEncryption.sanitizeForLogging(error));
       }
     }
   } catch (error) {
-    console.error('Error fetching existing webhooks:', error);
+    console.error('Error fetching existing webhooks:', TokenEncryption.sanitizeForLogging(error));
     // Fallback: try to register all webhooks anyway
     console.log('Falling back to registering all webhooks...');
     
@@ -238,10 +239,10 @@ async function registerWebhooks(session: any) {
           console.log(`Successfully registered webhook for ${topic}:`, result.webhook?.id);
         } else {
           const error = await response.text();
-          console.error(`Failed to register webhook for ${topic}:`, error);
+          console.error(`Failed to register webhook for ${topic}:`, TokenEncryption.sanitizeForLogging(error));
         }
       } catch (error) {
-        console.error(`Error registering webhook for ${topic}:`, error);
+        console.error(`Error registering webhook for ${topic}:`, TokenEncryption.sanitizeForLogging(error));
       }
     }
   }
@@ -252,7 +253,7 @@ const gdprWebhookHandlers = {
   'customers/data_request': async (topic: string, shop: string, body: string, webhookId: string) => {
     console.log(`Received GDPR ${topic} webhook from ${shop}`);
     const data = JSON.parse(body);
-    console.log(`Customer data request for shop ${shop}:`, data);
+    console.log(`Customer data request for shop ${shop}:`, TokenEncryption.sanitizeForLogging(data));
     // In production, gather customer data and send it
     // This handler must return 200 to pass Shopify's automated checks
   },
@@ -260,7 +261,7 @@ const gdprWebhookHandlers = {
   'customers/redact': async (topic: string, shop: string, body: string, webhookId: string) => {
     console.log(`Received GDPR ${topic} webhook from ${shop}`);
     const data = JSON.parse(body);
-    console.log(`Customer redaction request for shop ${shop}:`, data);
+    console.log(`Customer redaction request for shop ${shop}:`, TokenEncryption.sanitizeForLogging(data));
     // In production, delete customer data
     // This handler must return 200 to pass Shopify's automated checks
   },
@@ -268,7 +269,7 @@ const gdprWebhookHandlers = {
   'shop/redact': async (topic: string, shop: string, body: string, webhookId: string) => {
     console.log(`Received GDPR ${topic} webhook from ${shop}`);
     const data = JSON.parse(body);
-    console.log(`Shop redaction request for shop ${shop}:`, data);
+    console.log(`Shop redaction request for shop ${shop}:`, TokenEncryption.sanitizeForLogging(data));
     
     try {
       const store = await storage.getStoreByDomain(shop);
@@ -277,7 +278,7 @@ const gdprWebhookHandlers = {
         // In production, delete all shop data
       }
     } catch (error) {
-      console.error(`Error processing shop redaction for ${shop}:`, error);
+      console.error(`Error processing shop redaction for ${shop}:`, TokenEncryption.sanitizeForLogging(error));
     }
     // This handler must return 200 to pass Shopify's automated checks
   },
@@ -315,7 +316,7 @@ function verifyWebhookHMAC(secret: string) {
     try {
       req.body = JSON.parse(rawBody.toString('utf8'));
     } catch (error) {
-      console.error('Failed to parse webhook body:', error);
+      console.error('Failed to parse webhook body:', TokenEncryption.sanitizeForLogging(error));
       return res.status(400).send('Bad Request');
     }
     
@@ -339,7 +340,7 @@ export async function setupShopifyWebhooks(app: Express) {
     await setupWebhookEndpoint(app, '/api/webhooks');
     console.log("Shopify webhooks configured");
   } catch (error) {
-    console.error("Error setting up Shopify webhooks:", error);
+    console.error("Error setting up Shopify webhooks:", TokenEncryption.sanitizeForLogging(error));
   }
 }
 
@@ -366,7 +367,7 @@ async function setupWebhookEndpoint(app: Express, path: string = '/api/webhooks'
         await shopifyService.handleOrderWebhook(orderData, store.id);
         console.log(`Successfully processed ${topic} webhook from ${shop}`);
       } catch (error) {
-        console.error(`Error processing ${topic} webhook from ${shop}:`, error);
+        console.error(`Error processing ${topic} webhook from ${shop}:`, TokenEncryption.sanitizeForLogging(error));
       }
     },
     
@@ -385,7 +386,7 @@ async function setupWebhookEndpoint(app: Express, path: string = '/api/webhooks'
         await shopifyService.handleOrderWebhook(orderData, store.id);
         console.log(`Successfully processed ${topic} webhook from ${shop}`);
       } catch (error) {
-        console.error(`Error processing ${topic} webhook from ${shop}:`, error);
+        console.error(`Error processing ${topic} webhook from ${shop}:`, TokenEncryption.sanitizeForLogging(error));
       }
     },
     
@@ -404,7 +405,7 @@ async function setupWebhookEndpoint(app: Express, path: string = '/api/webhooks'
         await shopifyService.handleProductWebhook(productData, store.id);
         console.log(`Successfully processed ${topic} webhook from ${shop}`);
       } catch (error) {
-        console.error(`Error processing ${topic} webhook from ${shop}:`, error);
+        console.error(`Error processing ${topic} webhook from ${shop}:`, TokenEncryption.sanitizeForLogging(error));
       }
     },
     
@@ -423,7 +424,7 @@ async function setupWebhookEndpoint(app: Express, path: string = '/api/webhooks'
         await shopifyService.handleProductWebhook(productData, store.id);
         console.log(`Successfully processed ${topic} webhook from ${shop}`);
       } catch (error) {
-        console.error(`Error processing ${topic} webhook from ${shop}:`, error);
+        console.error(`Error processing ${topic} webhook from ${shop}:`, TokenEncryption.sanitizeForLogging(error));
       }
     },
     
@@ -442,7 +443,7 @@ async function setupWebhookEndpoint(app: Express, path: string = '/api/webhooks'
         await shopifyService.handleCustomerWebhook(customerData, store.id);
         console.log(`Successfully processed ${topic} webhook from ${shop}`);
       } catch (error) {
-        console.error(`Error processing ${topic} webhook from ${shop}:`, error);
+        console.error(`Error processing ${topic} webhook from ${shop}:`, TokenEncryption.sanitizeForLogging(error));
       }
     },
   };
@@ -469,7 +470,7 @@ async function setupWebhookEndpoint(app: Express, path: string = '/api/webhooks'
           res.status(200).send('OK');
         }
       } catch (error) {
-        console.error('Error processing webhook:', error);
+        console.error('Error processing webhook:', TokenEncryption.sanitizeForLogging(error));
         res.status(200).send('OK');
       }
     }
@@ -574,7 +575,7 @@ export async function setupShopifyAuth(app: Express) {
         }
         next();
       } catch (error) {
-        console.error("Error in auth callback:", error);
+        console.error("Error in auth callback:", TokenEncryption.sanitizeForLogging(error));
         // Continue anyway - webhook registration failure shouldn't block auth
         next();
       }
