@@ -1,6 +1,8 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import fs from "fs";
+import path from "path";
 
 const app = express();
 
@@ -73,6 +75,49 @@ app.use((req, res, next) => {
   next();
 });
 
+// Health check endpoint - must come before route registration
+app.get('/health', (_req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Only add root health check in development to avoid intercepting SPA in production
+if (app.get('env') === 'development') {
+  app.get('/', (_req, res) => {
+    res.status(200).json({ status: 'ok', message: 'Server is running in development' });
+  });
+}
+
+// Ensure static directory exists for production
+function ensureStaticDir() {
+  const expectedPath = path.resolve(import.meta.dirname, 'public');
+  
+  if (fs.existsSync(expectedPath)) {
+    return; // Already exists, nothing to do
+  }
+  
+  // Try to find the actual build directory
+  const candidates = [
+    path.resolve(import.meta.dirname, 'dist', 'public'),
+    path.resolve(import.meta.dirname, '..', 'client', 'dist'),
+    path.resolve(import.meta.dirname, '..', 'dist', 'public')
+  ];
+  
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      try {
+        // Create symlink to the found build directory
+        fs.symlinkSync(candidate, expectedPath, 'junction');
+        log(`Created symlink: ${expectedPath} -> ${candidate}`);
+        return;
+      } catch (error) {
+        log(`Failed to create symlink: ${error}`);
+        // If symlink fails, we'll handle this in the static serving section
+        break;
+      }
+    }
+  }
+}
+
 (async () => {
   const server = await registerRoutes(app);
 
@@ -90,6 +135,8 @@ app.use((req, res, next) => {
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
+    // Ensure static directory exists before serving
+    ensureStaticDir();
     serveStatic(app);
   }
 
