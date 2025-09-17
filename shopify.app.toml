@@ -1,5 +1,5 @@
 name = "BrandSight"
-client_id = "REPLACE_WITH_YOUR_ACTUAL_CLIENT_ID"
+client_id = "c7757dd8317e938754cef77d03490eb2"
 application_url = "https://brandsight.replit.app"
 embedded = true
 
