@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { FixedSizeList as List } from "react-window";
+import { List } from "react-window";
 import { Badge } from "@/components/ui/badge";
 import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 
@@ -199,7 +199,7 @@ export default function VirtualizedVendorTable({
           itemData={itemData}
           overscanCount={5} // Render 5 extra items outside visible area for smooth scrolling
         >
-          {VendorRow}
+          {VendorRow as any}
         </List>
       </div>
 
