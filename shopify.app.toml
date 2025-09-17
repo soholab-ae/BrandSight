@@ -1,13 +1,27 @@
-# Shopify App Configuration
+name = "BrandSight"
+client_id = "REPLACE_WITH_YOUR_ACTUAL_CLIENT_ID"
+application_url = "https://brandsight.replit.app"
+embedded = true
+
+[access_scopes]
+scopes = "read_products,read_orders,read_customers"
+
+[auth]
+redirect_urls = [
+  "https://brandsight.replit.app/api/auth/callback",
+  "https://brandsight.replit.app/api/auth/oauth/callback"
+]
+
 [webhooks]
 api_version = "2024-07"
 
 # Compliance webhooks (mandatory for App Store apps)
 [[webhooks.subscriptions]]
-topics = ["customers/data_request", "customers/redact", "shop/redact"]
+topics = ["app/uninstalled"]
+compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
 uri = "/api/webhooks"
 
-# Optional: Business webhooks
+# Business webhooks
 [[webhooks.subscriptions]]
 topics = ["orders/create", "orders/updated", "products/create", "products/update"]
 uri = "/api/webhooks"
