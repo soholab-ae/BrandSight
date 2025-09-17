@@ -15,6 +15,7 @@ import SalesAnalytics from "@/pages/sales";
 import CustomerInsights from "@/pages/customers";
 import ProductPerformance from "@/pages/products";
 import ExportReports from "@/pages/reports";
+import Billing from "@/pages/billing";
 
 function OnboardingRouter() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
@@ -68,6 +69,7 @@ function OnboardingRouter() {
       <Route path="/customers" component={CustomerInsights} />
       <Route path="/products" component={ProductPerformance} />
       <Route path="/reports" component={ExportReports} />
+      <Route path="/billing" component={Billing} />
       <Route path="/vendor/:vendorSlug" component={Dashboard} />
       
       {/* Fallback - show dashboard */}
