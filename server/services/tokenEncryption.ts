@@ -206,7 +206,7 @@ export function ensureEncryptionKey(): void {
       process.env.TOKEN_ENCRYPTION_KEY = key;
       console.warn(`Add this to your .env file: TOKEN_ENCRYPTION_KEY=${key}`);
     } else {
-      throw new Error('TOKEN_ENCRYPTION_KEY must be set in production environment');
+      throw new Error('TOKEN_ENCRYPTION_KEY must be set in production environment. Please add this secret to your deployment configuration.');
     }
   }
 }
