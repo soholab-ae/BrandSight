@@ -46,7 +46,8 @@ export class TokenEncryption {
       const key = this.getEncryptionKey();
       const iv = crypto.randomBytes(this.IV_LENGTH);
       
-      const cipher = crypto.createCipher(this.ALGORITHM, key);
+      // Use createCipheriv to properly apply the IV for GCM mode
+      const cipher = crypto.createCipheriv(this.ALGORITHM, key, iv);
       cipher.setAutoPadding(true);
       
       let encrypted = cipher.update(token, 'utf8', 'base64');
@@ -88,7 +89,9 @@ export class TokenEncryption {
         Buffer.from(encryptedToken, 'base64').toString('utf8')
       );
       
-      const decipher = crypto.createDecipher(this.ALGORITHM, key);
+      // Extract the IV from stored data and use createDecipheriv for GCM mode
+      const iv = Buffer.from(encryptedData.iv, 'base64');
+      const decipher = crypto.createDecipheriv(this.ALGORITHM, key, iv);
       decipher.setAuthTag(Buffer.from(encryptedData.authTag, 'base64'));
       decipher.setAutoPadding(true);
       
@@ -98,6 +101,11 @@ export class TokenEncryption {
       return decrypted;
     } catch (error) {
       console.error('Token decryption failed:', this.sanitizeError(error));
+      // Safe migration path: on decrypt failure, try treating as plaintext
+      if (this.isPlaintextToken(encryptedToken)) {
+        console.warn('Decrypt failed but token appears to be plaintext, using as-is for migration');
+        return encryptedToken;
+      }
       throw new Error('Failed to decrypt token');
     }
   }
