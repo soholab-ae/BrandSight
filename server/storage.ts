@@ -37,6 +37,7 @@ import {
   demoVendorAnalytics,
   isDemoMode 
 } from './demoData';
+import { TokenEncryption, ensureEncryptionKey } from './services/tokenEncryption';
 
 export interface IStorage {
   // User operations (required for auth)
@@ -83,6 +84,76 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  constructor() {
+    // Ensure encryption key is available
+    ensureEncryptionKey();
+  }
+
+  /**
+   * Encrypt access token for secure storage
+   */
+  private encryptAccessToken(token: string): string {
+    try {
+      return TokenEncryption.encryptToken(token);
+    } catch (error) {
+      console.error('Failed to encrypt access token:', TokenEncryption.sanitizeForLogging(error));
+      throw new Error('Token encryption failed');
+    }
+  }
+
+  /**
+   * Decrypt access token for API usage
+   */
+  private decryptAccessToken(encryptedToken: string): string {
+    try {
+      return TokenEncryption.decryptToken(encryptedToken);
+    } catch (error) {
+      console.error('Failed to decrypt access token:', TokenEncryption.sanitizeForLogging(error));
+      throw new Error('Token decryption failed');
+    }
+  }
+
+  /**
+   * Process store data after retrieval to decrypt access tokens
+   */
+  private processStoreForOutput(store: Store): Store {
+    if (!store.accessToken) return store;
+    
+    try {
+      return {
+        ...store,
+        accessToken: this.decryptAccessToken(store.accessToken)
+      };
+    } catch (error) {
+      console.error(`Failed to process store ${store.id}:`, TokenEncryption.sanitizeForLogging(error));
+      // Return store without access token to prevent app crashes
+      return { ...store, accessToken: '' };
+    }
+  }
+
+  /**
+   * Process stores array to decrypt access tokens
+   */
+  private processStoresForOutput(stores: Store[]): Store[] {
+    return stores.map(store => this.processStoreForOutput(store));
+  }
+
+  /**
+   * Process store data for database storage (encrypt access tokens)
+   */
+  private processStoreForStorage(store: InsertStore | Partial<Store>): any {
+    if (!store.accessToken) return store;
+    
+    try {
+      return {
+        ...store,
+        accessToken: this.encryptAccessToken(store.accessToken)
+      };
+    } catch (error) {
+      console.error('Failed to process store for storage:', TokenEncryption.sanitizeForLogging(error));
+      throw new Error('Store processing failed');
+    }
+  }
   // User operations
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
@@ -110,17 +181,20 @@ export class DatabaseStorage implements IStorage {
     if (isDemoMode(userId)) {
       return [demoStore];
     }
-    return await db.select().from(stores).where(eq(stores.userId, userId));
+    const stores = await db.select().from(stores).where(eq(stores.userId, userId));
+    return this.processStoresForOutput(stores);
   }
 
   async createStore(store: InsertStore): Promise<Store> {
-    const [newStore] = await db.insert(stores).values([store]).returning();
-    return newStore;
+    console.log(`Creating store: ${TokenEncryption.sanitizeForLogging(store)}`);
+    const processedStore = this.processStoreForStorage(store);
+    const [newStore] = await db.insert(stores).values([processedStore]).returning();
+    return this.processStoreForOutput(newStore);
   }
 
   async getStore(id: string): Promise<Store | undefined> {
     const [store] = await db.select().from(stores).where(eq(stores.id, id));
-    return store;
+    return store ? this.processStoreForOutput(store) : undefined;
   }
 
   async getStoreByDomain(domain: string): Promise<Store | undefined> {
@@ -129,16 +203,18 @@ export class DatabaseStorage implements IStorage {
       return demoStore;
     }
     const [store] = await db.select().from(stores).where(eq(stores.domain, domain));
-    return store;
+    return store ? this.processStoreForOutput(store) : undefined;
   }
 
   async updateStore(id: string, updates: Partial<Store>): Promise<Store> {
+    console.log(`Updating store ${id}: ${TokenEncryption.sanitizeForLogging(updates)}`);
+    const processedUpdates = this.processStoreForStorage(updates);
     const [store] = await db
       .update(stores)
-      .set(updates)
+      .set(processedUpdates)
       .where(eq(stores.id, id))
       .returning();
-    return store;
+    return this.processStoreForOutput(store);
   }
 
   // Vendor operations
