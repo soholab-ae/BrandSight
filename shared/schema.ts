@@ -58,7 +58,9 @@ export const vendors = pgTable("vendors", {
   name: varchar("name").notNull(),
   slug: varchar("slug").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("IDX_vendors_store_id").on(table.storeId),
+]);
 
 // Products
 export const products = pgTable("products", {
@@ -74,7 +76,10 @@ export const products = pgTable("products", {
   status: varchar("status"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("IDX_products_store_id").on(table.storeId),
+  index("IDX_products_vendor_id").on(table.vendorId),
+]);
 
 // Orders
 export const orders = pgTable("orders", {
@@ -93,7 +98,11 @@ export const orders = pgTable("orders", {
   referringSite: varchar("referring_site"),
   processedAt: timestamp("processed_at"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("IDX_orders_store_id").on(table.storeId),
+  index("IDX_orders_store_id_processed_at").on(table.storeId, table.processedAt),
+  index("IDX_orders_financial_status").on(table.financialStatus),
+]);
 
 // Order line items
 export const orderLineItems = pgTable("order_line_items", {
@@ -106,7 +115,11 @@ export const orderLineItems = pgTable("order_line_items", {
   quantity: integer("quantity"),
   price: decimal("price", { precision: 10, scale: 2 }),
   totalDiscount: decimal("total_discount", { precision: 10, scale: 2 }),
-});
+}, (table) => [
+  index("IDX_order_line_items_order_id").on(table.orderId),
+  index("IDX_order_line_items_vendor_id").on(table.vendorId),
+  index("IDX_order_line_items_product_id").on(table.productId),
+]);
 
 // Analytics aggregated data
 export const vendorAnalytics = pgTable("vendor_analytics", {
@@ -121,7 +134,11 @@ export const vendorAnalytics = pgTable("vendor_analytics", {
   aov: decimal("aov", { precision: 10, scale: 2 }).default("0"),
   conversionRate: decimal("conversion_rate", { precision: 5, scale: 4 }).default("0"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("IDX_vendor_analytics_store_id").on(table.storeId),
+  index("IDX_vendor_analytics_store_vendor_date").on(table.storeId, table.vendorId, table.date),
+  index("IDX_vendor_analytics_date").on(table.date),
+]);
 
 // Page analytics
 export const pageAnalytics = pgTable("page_analytics", {
@@ -134,7 +151,11 @@ export const pageAnalytics = pgTable("page_analytics", {
   bounceRate: decimal("bounce_rate", { precision: 5, scale: 4 }),
   date: timestamp("date").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("IDX_page_analytics_store_id").on(table.storeId),
+  index("IDX_page_analytics_store_vendor_date").on(table.storeId, table.vendorId, table.date),
+  index("IDX_page_analytics_path").on(table.path),
+]);
 
 // Schema exports
 export const insertStoreSchema = createInsertSchema(stores).omit({
