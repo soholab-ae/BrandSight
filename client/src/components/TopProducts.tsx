@@ -79,48 +79,49 @@ export default function TopProducts() {
 
   return (
     <Card className="shadow-sm border border-gray-200">
-      <CardHeader>
+      <CardHeader className="p-4 sm:p-6">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-semibold text-gray-900">
+          <CardTitle className="text-base sm:text-lg font-semibold text-gray-900">
             Top Products by Vendor
           </CardTitle>
           <Button 
             variant="ghost" 
             size="sm"
-            className="text-brand-600 hover:text-brand-700 font-medium"
+            className="text-brand-600 hover:text-brand-700 font-medium touch-manipulation"
             data-testid="button-view-all-products"
           >
-            View All
+            <span className="hidden sm:inline">View All</span>
+            <span className="sm:hidden">All</span>
           </Button>
         </div>
       </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
+      <CardContent className="p-4 sm:p-6">
+        <div className="space-y-3 sm:space-y-4">
           {mockProducts.map((product, index) => (
             <div 
               key={product.productId} 
-              className="flex items-center space-x-4"
+              className="flex items-center space-x-3 sm:space-x-4 p-2 sm:p-0 rounded-lg hover:bg-gray-50 touch-manipulation"
               data-testid={`product-${product.productId}`}
             >
               <img 
                 src={productImages[index]} 
                 alt={product.title}
-                className="w-12 h-12 rounded-lg object-cover"
+                className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg object-cover flex-shrink-0"
                 data-testid={`img-product-${product.productId}`}
               />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate" data-testid={`text-product-title-${product.productId}`}>
+                <p className="text-xs sm:text-sm font-medium text-gray-900 truncate" data-testid={`text-product-title-${product.productId}`}>
                   {product.title}
                 </p>
-                <p className="text-sm text-gray-500" data-testid={`text-product-vendor-${product.productId}`}>
+                <p className="text-xs sm:text-sm text-gray-500" data-testid={`text-product-vendor-${product.productId}`}>
                   {product.vendor}
                 </p>
               </div>
-              <div className="text-right">
-                <p className="text-sm font-medium text-gray-900" data-testid={`text-product-revenue-${product.productId}`}>
+              <div className="text-right flex-shrink-0">
+                <p className="text-xs sm:text-sm font-medium text-gray-900" data-testid={`text-product-revenue-${product.productId}`}>
                   ${product.totalRevenue.toLocaleString()}
                 </p>
-                <p className="text-sm text-gray-500" data-testid={`text-product-units-${product.productId}`}>
+                <p className="text-xs sm:text-sm text-gray-500" data-testid={`text-product-units-${product.productId}`}>
                   {product.totalQuantity} units
                 </p>
               </div>

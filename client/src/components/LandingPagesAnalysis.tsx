@@ -75,26 +75,27 @@ export default function LandingPagesAnalysis() {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
       {/* Top Landing Pages */}
-      <Card className="shadow-sm border border-gray-200 p-6">
+      <Card className="shadow-sm border border-gray-200 p-4 sm:p-6">
         <CardHeader className="px-0">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg font-semibold text-gray-900">
+            <CardTitle className="text-base sm:text-lg font-semibold text-gray-900">
               Top Landing Pages
             </CardTitle>
             <Button 
               variant="ghost" 
               size="sm"
-              className="text-brand-600 hover:text-brand-700 font-medium"
+              className="text-brand-600 hover:text-brand-700 font-medium touch-manipulation"
               data-testid="button-view-all-pages"
             >
-              View All
+              <span className="hidden sm:inline">View All</span>
+              <span className="sm:hidden">All</span>
             </Button>
           </div>
         </CardHeader>
         <CardContent className="px-0">
-          <div className="space-y-4">
+          <div className="space-y-3 sm:space-y-4">
             {mockPages.map((page) => (
               <div 
                 key={page.id}
