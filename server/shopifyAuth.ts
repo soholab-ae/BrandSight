@@ -511,45 +511,66 @@ export async function setupShopifyAuth(app: Express) {
   // Trust proxy for secure cookies
   app.set("trust proxy", 1);
   
-  // Apply Shopify middleware
-  app.use(shopifyInstance.cspHeaders());
+  // NOTE: Removed shopifyInstance.cspHeaders() to avoid conflicts with our custom CSP
+  // The default Shopify CSP headers contain invalid 'unsafe-dynamic' directive
   
-  // Add dynamic CSP headers for embedded app
+  // Add comprehensive CSP headers for embedded Shopify app
   app.use((req, res, next) => {
     const shop = req.query.shop || req.headers['x-shopify-shop-domain'];
     
-    if (shop || req.path === '/' || req.path.startsWith('/welcome') || req.path.startsWith('/dashboard')) {
-      // Modify only the frame-ancestors directive, keeping other CSP rules
-      const existingCSP = res.getHeader('Content-Security-Policy') as string || '';
-      
-      // Build frame-ancestors based on shop
-      let frameAncestors = 'https://admin.shopify.com https://*.myshopify.com';
-      if (shop) {
-        frameAncestors = `https://${shop} https://admin.shopify.com`;
-      }
-      
-      // If there's an existing CSP, update frame-ancestors; otherwise set a complete policy
-      if (existingCSP) {
-        // Replace frame-ancestors directive if it exists, otherwise append it
-        const updatedCSP = existingCSP.replace(
-          /frame-ancestors[^;]*(;|$)/,
-          `frame-ancestors ${frameAncestors};`
-        );
-        
-        // If no frame-ancestors was found, append it
-        if (updatedCSP === existingCSP) {
-          res.setHeader('Content-Security-Policy', `${existingCSP} frame-ancestors ${frameAncestors};`);
-        } else {
-          res.setHeader('Content-Security-Policy', updatedCSP);
-        }
-      } else {
-        // Set a complete CSP if none exists
-        res.setHeader(
-          'Content-Security-Policy',
-          `default-src 'self' https://*.myshopify.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.shopify.com; style-src 'self' 'unsafe-inline' https://cdn.shopify.com; img-src 'self' data: https:; font-src 'self' data: https:; connect-src 'self' https://*.myshopify.com; frame-ancestors ${frameAncestors};`
-        );
-      }
+    // Build frame-ancestors based on shop context
+    let frameAncestors = 'https://admin.shopify.com https://*.myshopify.com';
+    if (shop) {
+      frameAncestors = `https://${shop} https://admin.shopify.com`;
     }
+    
+    // Comprehensive CSP policy that allows all necessary resources for embedded Shopify apps
+    const cspDirectives = [
+      // Allow self and Shopify domains for default resources
+      "default-src 'self' https://*.myshopify.com https://cdn.shopify.com",
+      
+      // Scripts: Allow self, inline scripts, eval, and Shopify CDN + admin resources
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.shopify.com https://admin.shopify.com https://*.myshopify.com",
+      
+      // Styles: Allow self, inline styles, and Shopify resources
+      "style-src 'self' 'unsafe-inline' https://cdn.shopify.com https://admin.shopify.com https://*.myshopify.com",
+      
+      // Images: Allow self, data URIs, blob URIs, and all HTTPS sources
+      "img-src 'self' data: blob: https:",
+      
+      // Fonts: Allow self, data URIs, and HTTPS sources
+      "font-src 'self' data: https:",
+      
+      // Connections: Allow self, websockets, and HTTPS (including Shopify domains)
+      "connect-src 'self' ws: wss: https: https://*.myshopify.com https://admin.shopify.com",
+      
+      // Worker sources: Allow self and blob for web workers
+      "worker-src 'self' blob:",
+      
+      // Child sources: Allow self and blob for iframes/workers
+      "child-src 'self' blob:",
+      
+      // Object sources: Block object/embed tags for security
+      "object-src 'none'",
+      
+      // Base URI: Restrict to self
+      "base-uri 'self'",
+      
+      // Form actions: Allow self and Shopify domains
+      "form-action 'self' https://*.myshopify.com https://admin.shopify.com",
+      
+      // Frame ancestors: Critical for embedded app functionality
+      `frame-ancestors ${frameAncestors}`,
+      
+      // Media sources: Allow self and HTTPS
+      "media-src 'self' https:"
+    ];
+    
+    // Set the comprehensive CSP policy
+    res.setHeader('Content-Security-Policy', cspDirectives.join('; '));
+    
+    // Remove X-Frame-Options header as it conflicts with CSP frame-ancestors
+    res.removeHeader('X-Frame-Options');
     
     next();
   });
