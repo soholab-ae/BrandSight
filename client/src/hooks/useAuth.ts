@@ -35,7 +35,19 @@ export function useAuth() {
     queryFn: async () => {
       const response = await fetch(authUrl);
       
-      if (response.status === 401) {
+      // Handle both 401 (unauthorized) and 302 (redirect to auth)
+      if (response.status === 401 || response.status === 302) {
+        // For 302 redirects, use the Location header
+        if (response.status === 302) {
+          const redirectUrl = response.headers.get('Location');
+          if (redirectUrl) {
+            console.log('[AUTH] Server redirect (302), following to:', redirectUrl);
+            window.location.href = redirectUrl;
+            return null;
+          }
+        }
+        
+        // For 401 or if no Location header, try to parse JSON response
         try {
           const errorData = await response.json();
           
@@ -46,7 +58,7 @@ export function useAuth() {
             return null;
           }
         } catch (e) {
-          console.log('[AUTH] Could not parse 401 response as JSON');
+          console.log('[AUTH] Could not parse auth response as JSON');
         }
         
         // Fallback: build login URL with current shop/host parameters
