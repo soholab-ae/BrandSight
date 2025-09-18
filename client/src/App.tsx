@@ -6,7 +6,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
-import Welcome from "@/pages/welcome";
 import Setup from "@/pages/setup";
 import Sync from "@/pages/sync";
 import Dashboard from "@/pages/dashboard";
@@ -58,12 +57,12 @@ function OnboardingRouter() {
   return (
     <Switch>
       {/* Allow direct access to onboarding pages if users want to connect a store */}
-      <Route path="/welcome" component={Welcome} />
       <Route path="/setup" component={Setup} />
       <Route path="/sync" component={Sync} />
       
       {/* Main dashboard and analytics pages */}
       <Route path="/" component={Dashboard} />
+      <Route path="/dashboard" component={Dashboard} />
       <Route path="/vendors" component={VendorPerformance} />
       <Route path="/sales" component={SalesAnalytics} />
       <Route path="/customers" component={CustomerInsights} />
