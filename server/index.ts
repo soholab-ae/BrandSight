@@ -80,6 +80,22 @@ app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Diagnostic endpoint to verify static file serving
+app.get('/__diag/static', (_req, res) => {
+  const publicPath = path.resolve(import.meta.dirname, 'public');
+  const assetsPath = path.resolve(publicPath, 'assets');
+  
+  res.json({
+    staticPath: publicPath,
+    assetsPath: assetsPath,
+    publicExists: fs.existsSync(publicPath),
+    assetsExists: fs.existsSync(assetsPath),
+    assetCount: fs.existsSync(assetsPath) ? fs.readdirSync(assetsPath).length : 0,
+    environment: app.get('env'),
+    sampleAssets: fs.existsSync(assetsPath) ? fs.readdirSync(assetsPath).slice(0, 3) : []
+  });
+});
+
 // Only add root health check in development to avoid intercepting SPA in production
 if (app.get('env') === 'development') {
   app.get('/', (_req, res) => {
@@ -90,45 +106,46 @@ if (app.get('env') === 'development') {
 // Ensure static directory and assets exist for production
 function ensureStaticDir() {
   const expectedPath = path.resolve(import.meta.dirname, 'public');
-  const distAssetsPath = path.resolve(import.meta.dirname, '..', 'dist', 'public', 'assets');
+  const distPublicPath = path.resolve(import.meta.dirname, '..', 'dist', 'public');
+  const distAssetsPath = path.resolve(distPublicPath, 'assets');
   
-  // Check if we have built assets
-  if (!fs.existsSync(distAssetsPath)) {
-    log(`Assets not found at ${distAssetsPath}, attempting to build...`);
-    try {
-      // Try to build the client
-      const { execSync } = require('child_process');
-      execSync('npm run build', { cwd: path.resolve(import.meta.dirname, '..'), stdio: 'inherit' });
-      log('Successfully built client assets');
-    } catch (error) {
-      log(`Failed to build assets: ${error}`);
-    }
-  }
-  
-  if (fs.existsSync(expectedPath)) {
-    return; // Already exists, nothing to do
-  }
-  
-  // Try to find the actual build directory
-  const candidates = [
-    path.resolve(import.meta.dirname, 'dist', 'public'),
-    path.resolve(import.meta.dirname, '..', 'client', 'dist'),
-    path.resolve(import.meta.dirname, '..', 'dist', 'public')
-  ];
-  
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
+  // Always prefer dist/public if it exists with assets
+  if (fs.existsSync(distAssetsPath)) {
+    // Remove existing symlink/directory if it exists
+    if (fs.existsSync(expectedPath)) {
       try {
-        // Create symlink to the found build directory
-        fs.symlinkSync(candidate, expectedPath, 'junction');
-        log(`Created symlink: ${expectedPath} -> ${candidate}`);
-        return;
+        fs.rmSync(expectedPath, { recursive: true, force: true });
+        log(`Removed existing server/public to use fresh dist/public`);
       } catch (error) {
-        log(`Failed to create symlink: ${error}`);
-        // If symlink fails, we'll handle this in the static serving section
-        break;
+        log(`Warning: Could not remove existing server/public: ${error}`);
       }
     }
+    
+    try {
+      // Create fresh symlink to dist/public
+      fs.symlinkSync(distPublicPath, expectedPath, 'junction');
+      log(`Created symlink: ${expectedPath} -> ${distPublicPath}`);
+      log(`Assets directory contains: ${fs.readdirSync(distAssetsPath).length} files`);
+      return;
+    } catch (error) {
+      log(`Failed to create symlink: ${error}`);
+    }
+  }
+  
+  // Fallback: Check if we need to build assets
+  log(`Built assets not found at ${distAssetsPath}, attempting to build...`);
+  try {
+    const { execSync } = require('child_process');
+    execSync('npm run build', { cwd: path.resolve(import.meta.dirname, '..'), stdio: 'inherit' });
+    log('Successfully built client assets');
+    
+    // Retry symlink after build
+    if (fs.existsSync(distPublicPath)) {
+      fs.symlinkSync(distPublicPath, expectedPath, 'junction');
+      log(`Created symlink after build: ${expectedPath} -> ${distPublicPath}`);
+    }
+  } catch (error) {
+    log(`Failed to build assets: ${error}`);
   }
 }
 
