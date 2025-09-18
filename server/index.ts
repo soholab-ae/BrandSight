@@ -19,43 +19,8 @@ app.use((req, res, next) => {
 
 app.use(express.urlencoded({ extended: false }));
 
-// Add CSP headers for Shopify embedded app to work in Firefox
-app.use((req, res, next) => {
-  // Get shop from various sources
-  const shop = req.query.shop as string || 
-               req.headers['x-shopify-shop'] as string ||
-               process.env.DEFAULT_SHOP_DOMAIN;
-  
-  // Base CSP directives for proper app functionality
-  const baseCsp = [
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https:",
-    "font-src 'self' data:",
-    "connect-src 'self' ws: wss: https:",
-    "object-src 'none'",
-    "base-uri 'self'"
-  ].join('; ');
-  
-  if (shop) {
-    // Set Content-Security-Policy to allow embedding in Shopify admin
-    res.setHeader(
-      'Content-Security-Policy',
-      `${baseCsp}; frame-ancestors https://${shop} https://admin.shopify.com;`
-    );
-  } else {
-    // For non-embedded contexts, allow self
-    res.setHeader(
-      'Content-Security-Policy',
-      `${baseCsp}; frame-ancestors 'self';`
-    );
-  }
-  
-  // Remove X-Frame-Options header as it conflicts with CSP
-  res.removeHeader('X-Frame-Options');
-  
-  next();
-});
+// NOTE: CSP headers are now handled in shopifyAuth.ts to avoid conflicts
+// This middleware was causing duplicate CSP headers which led to policy violations
 
 app.use((req, res, next) => {
   const start = Date.now();
