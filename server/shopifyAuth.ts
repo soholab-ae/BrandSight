@@ -556,29 +556,65 @@ export async function setupShopifyAuth(app: Express) {
   
   // Login route that redirects to OAuth
   app.get('/api/login', (req, res) => {
-    const shop = req.query.shop as string || process.env.DEFAULT_SHOP_DOMAIN || '';
+    console.log('[LOGIN DEBUG] Login route called with query:', req.query);
+    console.log('[LOGIN DEBUG] Login route referer:', req.get('referer'));
+    
+    let shop = req.query.shop as string || process.env.DEFAULT_SHOP_DOMAIN || '';
+    const host = req.query.host as string;
+    const embedded = req.query.embedded === '1';
+    
+    // Enhanced shop extraction for embedded contexts
+    const referer = req.get('referer') || '';
+    const isFromShopifyAdmin = referer.includes('admin.shopify.com');
+    
+    // If no shop but we're from Shopify admin, try to extract from referer
+    if (!shop && isFromShopifyAdmin) {
+      try {
+        const refererUrl = new URL(referer);
+        const pathParts = refererUrl.pathname.split('/');
+        const storeIndex = pathParts.indexOf('store');
+        if (storeIndex !== -1 && pathParts[storeIndex + 1]) {
+          shop = `${pathParts[storeIndex + 1]}.myshopify.com`;
+          console.log('[LOGIN DEBUG] Extracted shop from referer:', shop);
+        }
+      } catch (error) {
+        console.log('[LOGIN DEBUG] Failed to parse referer URL:', error);
+      }
+    }
     
     // If shop parameter is provided, redirect to auth with shop
     if (shop) {
-      console.log(`Initiating OAuth for shop: ${shop}`);
-      res.redirect(`/api/auth?shop=${shop}`);
+      const authUrl = `/api/auth?shop=${encodeURIComponent(shop)}${host ? `&host=${encodeURIComponent(host)}` : ''}`;
+      console.log(`[LOGIN DEBUG] Initiating OAuth for shop: ${shop}, redirect to: ${authUrl}`);
+      res.redirect(authUrl);
     } else {
       // Check if we're in Shopify admin (embedded app)
-      const referer = req.get('referer') || '';
-      const isEmbedded = referer.includes('admin.shopify.com') || req.query.embedded === '1';
+      const isEmbedded = isFromShopifyAdmin || embedded;
       
       if (isEmbedded) {
-        // For embedded apps, need shop parameter
-        res.status(400).send(`
-          <html>
-            <body>
-              <h2>Shop parameter required</h2>
-              <p>Please access this app from your Shopify admin panel.</p>
-            </body>
-          </html>
-        `);
+        // For embedded apps without shop parameter, return JSON response for proper top-frame redirect
+        // The client will handle this using window.top.location.href to break out of the iframe
+        console.log('[LOGIN DEBUG] Embedded app without shop parameter - returning 401 with requiresReload');
+        
+        // Build a generic auth URL - the frontend will add shop parameters when available
+        const authUrl = '/api/auth';
+        
+        return res.status(401).json({
+          message: 'Shop parameter required for embedded app',
+          requiresReload: true,
+          loginUrl: authUrl,
+          isEmbedded: true,
+          debug: {
+            referer: req.get('referer'),
+            userAgent: req.get('user-agent'),
+            host: req.get('host'),
+            embedded: embedded,
+            isFromShopifyAdmin: isFromShopifyAdmin
+          }
+        });
       } else {
         // For standalone access, redirect to landing page
+        console.log('[LOGIN DEBUG] Standalone access, redirecting to landing page');
         res.redirect('/');
       }
     }
