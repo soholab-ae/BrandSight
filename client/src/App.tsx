@@ -19,15 +19,25 @@ import Billing from "@/pages/billing";
 function OnboardingRouter() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   
-  // Fetch stores data to determine onboarding state
-  const { data: stores, isLoading: storesLoading, isError: storesError } = useQuery({
+  // Check if we're in embedded Shopify context
+  const urlParams = new URLSearchParams(window.location.search);
+  const shop = urlParams.get('shop');
+  const host = urlParams.get('host');
+  const isEmbeddedContext = shop || host || 
+    window.location.pathname.startsWith('/dashboard') ||
+    document.referrer?.includes('admin.shopify.com');
+
+  // For embedded apps, skip store fetching and go directly to dashboard when authenticated
+  // For non-embedded apps, fetch stores to determine onboarding state
+  const { data: stores, isLoading: storesLoading } = useQuery({
     queryKey: ['/api/stores'],
-    enabled: isAuthenticated, // Only fetch if authenticated
-    retry: 1 // Reduce retries to speed up error detection
+    enabled: isAuthenticated && !isEmbeddedContext, // Skip for embedded apps
+    retry: 1
   });
 
-  // Show loading state while checking authentication or stores
-  if (authLoading || (isAuthenticated && storesLoading)) {
+  // Show loading state while checking authentication
+  // For embedded apps, only wait for auth, not stores
+  if (authLoading || (isAuthenticated && !isEmbeddedContext && storesLoading)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center" data-testid="loading-screen">
         <div className="text-center">
@@ -39,6 +49,7 @@ function OnboardingRouter() {
   }
 
   // Not authenticated - show landing page
+  // For embedded contexts that are not authenticated, the useAuth hook will handle redirection
   if (!isAuthenticated) {
     return (
       <Switch>
@@ -51,16 +62,16 @@ function OnboardingRouter() {
     );
   }
 
-  // Always show dashboard with demo data - easy-access demo mode
-  // Users can optionally connect a real store, but demo data is always available
+  // Authenticated users - for embedded apps, go directly to dashboard
+  // For non-embedded apps, allow access to setup/sync if they want to connect additional stores
   
   return (
     <Switch>
-      {/* Allow direct access to onboarding pages if users want to connect a store */}
-      <Route path="/setup" component={Setup} />
-      <Route path="/sync" component={Sync} />
+      {/* For non-embedded apps, allow direct access to onboarding pages */}
+      {!isEmbeddedContext && <Route path="/setup" component={Setup} />}
+      {!isEmbeddedContext && <Route path="/sync" component={Sync} />}
       
-      {/* Main dashboard and analytics pages */}
+      {/* Main dashboard and analytics pages - accessible for all authenticated users */}
       <Route path="/" component={Dashboard} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/vendors" component={VendorPerformance} />
@@ -71,7 +82,7 @@ function OnboardingRouter() {
       <Route path="/billing" component={Billing} />
       <Route path="/vendor/:vendorSlug" component={Dashboard} />
       
-      {/* Fallback - show dashboard */}
+      {/* Fallback - show dashboard (important for embedded apps) */}
       <Route component={Dashboard} />
     </Switch>
   );
