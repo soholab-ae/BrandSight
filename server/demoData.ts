@@ -17,6 +17,10 @@ export const demoStore: Store = {
   accessToken: "demo_token",
   isActive: true,
   lastSyncAt: new Date(),
+  lastProductSyncAt: new Date('2024-12-01'),
+  lastOrderSyncAt: new Date('2024-12-01'), 
+  productSyncCursor: null,
+  orderSyncCursor: null,
   createdAt: new Date('2024-01-01')
 };
 
