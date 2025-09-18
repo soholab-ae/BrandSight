@@ -3,6 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useState } from "react";
+import { useToast } from "@/hooks/use-toast";
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -47,7 +49,74 @@ interface VendorDetailModalProps {
 }
 
 export default function VendorDetailModal({ isOpen, onClose, vendor }: VendorDetailModalProps) {
+  const { toast } = useToast();
+  const [isExporting, setIsExporting] = useState(false);
+  
   if (!vendor) return null;
+  
+  // Export handler for vendor-specific data
+  const handleVendorExport = async (format: 'csv' | 'excel' = 'csv') => {
+    setIsExporting(true);
+    
+    try {
+      // Build export URL based on format
+      const exportUrl = format === 'csv' 
+        ? '/api/stores/current/vendors/export/csv'
+        : '/api/stores/current/vendors/export/excel';
+      
+      // Add query parameters for vendor-specific filtering
+      const params = new URLSearchParams({
+        vendorId: vendor.id,
+        dateRange: '30d',
+        sortBy: 'revenue',
+        sortDirection: 'desc'
+      });
+      
+      // Fetch the export data
+      const response = await fetch(`${exportUrl}?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+          'Accept': format === 'csv' ? 'text/csv' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Export failed');
+      }
+      
+      // Get the blob and create download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      
+      // Create download link
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `brandsight-${vendor.name.toLowerCase().replace(/\s+/g, '-')}-analytics-${new Date().toISOString().split('T')[0]}.${format}`;
+      
+      // Trigger download
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // Clean up
+      window.URL.revokeObjectURL(url);
+      
+      toast({
+        title: "Export completed",
+        description: `${vendor.name} analytics exported successfully as ${format.toUpperCase()}.`,
+      });
+      
+    } catch (error) {
+      console.error('Vendor export error:', error);
+      toast({
+        title: "Export failed",
+        description: `Unable to export ${vendor.name} analytics. Please try again.`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   // Mock detailed data for the vendor
   const vendorDetails = {
@@ -115,9 +184,15 @@ export default function VendorDetailModal({ isOpen, onClose, vendor }: VendorDet
               </div>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" data-testid="button-export-vendor-data">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => handleVendorExport('csv')}
+                disabled={isExporting}
+                data-testid="button-export-vendor-data"
+              >
                 <Download className="w-4 h-4 mr-2" />
-                Export Data
+                {isExporting ? 'Exporting...' : 'Export Data'}
               </Button>
               <Button variant="outline" size="sm" data-testid="button-view-products">
                 <ExternalLink className="w-4 h-4 mr-2" />

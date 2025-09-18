@@ -54,7 +54,7 @@ export interface IStorage {
   // Vendor operations (with pagination)
   getStoreVendors(storeId: string): Promise<Vendor[]>;
   getStoreVendorsPaginated(storeId: string, params: PaginationParams): Promise<PaginatedResponse<Vendor>>;
-  getStoreVendorMetrics(storeId: string, params: PaginationParams): Promise<PaginatedResponse<VendorMetrics>>;
+  getStoreVendorMetrics(storeId: string, params: PaginationParams & { planRestrictions?: any }): Promise<PaginatedResponse<VendorMetrics>>;
   createVendor(vendor: InsertVendor): Promise<Vendor>;
   getVendor(id: string): Promise<Vendor | undefined>;
   
@@ -308,23 +308,40 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getStoreVendorMetrics(storeId: string, params: PaginationParams): Promise<PaginatedResponse<VendorMetrics>> {
-    const { page = 1, limit = 50, sortBy = 'revenue', sortDirection = 'desc', search } = params;
+  async getStoreVendorMetrics(storeId: string, params: PaginationParams & { planRestrictions?: any }): Promise<PaginatedResponse<VendorMetrics>> {
+    const { page = 1, limit = 50, sortBy = 'revenue', sortDirection = 'desc', search, vendorId, planRestrictions } = params;
     const offset = (page - 1) * limit;
 
-    // Return demo vendor metrics for demo store
+    // Return demo vendor metrics for demo store with plan-based filtering
     if (storeId === 'demo_store_1') {
-      const vendorMetrics: VendorMetrics[] = demoVendors.map(vendor => ({
-        id: vendor.id,
-        name: vendor.name,
-        productCount: Math.floor(Math.random() * 100 + 10),
-        revenue: Math.floor(Math.random() * 100000 + 10000),
-        aov: Math.floor(Math.random() * 200 + 50),
-        conversion: Math.random() * 5 + 1,
-        visitors: Math.floor(Math.random() * 10000 + 1000),
-        growth: Math.random() * 50 - 10,
-        totalOrders: Math.floor(Math.random() * 500 + 50)
-      }));
+      // Apply plan-based data history filtering 
+      const cutoffDate = planRestrictions?.dataHistoryDays 
+        ? new Date(Date.now() - planRestrictions.dataHistoryDays * 24 * 60 * 60 * 1000)
+        : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000); // Default to 90 days
+      
+      // Filter demo analytics by date cutoff
+      const filteredAnalytics = demoVendorAnalytics.filter(a => a.date >= cutoffDate);
+      
+      const vendorMetrics: VendorMetrics[] = demoVendors.map(vendor => {
+        // Calculate metrics from filtered analytics
+        const vendorAnalytics = filteredAnalytics.filter(a => a.vendorId === vendor.id);
+        const totalRevenue = vendorAnalytics.reduce((sum, a) => sum + parseFloat(a.revenue || "0"), 0);
+        const totalOrders = vendorAnalytics.reduce((sum, a) => sum + (a.orders || 0), 0);
+        const totalVisitors = vendorAnalytics.reduce((sum, a) => sum + (a.visitors || 0), 0);
+        const totalConversions = vendorAnalytics.reduce((sum, a) => sum + (a.conversions || 0), 0);
+        
+        return {
+          id: vendor.id,
+          name: vendor.name,
+          productCount: Math.floor(Math.random() * 100 + 10),
+          revenue: totalRevenue > 0 ? totalRevenue : Math.floor(Math.random() * 100000 + 10000),
+          aov: totalOrders > 0 ? totalRevenue / totalOrders : Math.floor(Math.random() * 200 + 50),
+          conversion: totalVisitors > 0 ? (totalConversions / totalVisitors) * 100 : Math.random() * 5 + 1,
+          visitors: totalVisitors > 0 ? totalVisitors : Math.floor(Math.random() * 10000 + 1000),
+          growth: Math.random() * 50 - 10,
+          totalOrders: totalOrders > 0 ? totalOrders : Math.floor(Math.random() * 500 + 50)
+        };
+      });
 
       let filteredMetrics = [...vendorMetrics];
       
@@ -332,6 +349,11 @@ export class DatabaseStorage implements IStorage {
         filteredMetrics = filteredMetrics.filter(v => 
           v.name.toLowerCase().includes(search.toLowerCase())
         );
+      }
+      
+      // Filter by vendorId if provided
+      if (vendorId) {
+        filteredMetrics = filteredMetrics.filter(v => v.id === vendorId);
       }
       
       // Sort metrics
@@ -358,7 +380,12 @@ export class DatabaseStorage implements IStorage {
       };
     }
 
-    // TODO: Implement real vendor metrics calculation from database
+    // Apply plan-based data history filtering for real data
+    const cutoffDate = planRestrictions?.dataHistoryDays 
+      ? new Date(Date.now() - planRestrictions.dataHistoryDays * 24 * 60 * 60 * 1000)
+      : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000); // Default to 90 days
+    
+    // TODO: Implement real vendor metrics calculation from database with date filtering
     // For now, return empty result for non-demo stores
     return {
       data: [],

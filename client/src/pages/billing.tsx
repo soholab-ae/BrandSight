@@ -28,14 +28,17 @@ export default function Billing() {
     retry: 1,
   });
   
+  // Selected plan state
+  const [selectedPlan, setSelectedPlan] = useState('Starter');
+  
   // Create subscription mutation
   const subscribeMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (planName: string) => {
       setIsProcessing(true);
       const response = await fetch('/api/billing/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planName: 'BrandSight Premium' }),
+        body: JSON.stringify({ planName }),
       });
       
       if (!response.ok) {
@@ -96,25 +99,57 @@ export default function Billing() {
     cancelMutation.mutate(subscriptionId);
   };
 
-  // Demo features list
-  const premiumFeatures = [
-    { icon: Zap, text: "Unlimited vendor tracking", included: true },
-    { icon: Star, text: "Advanced analytics & insights", included: true },
-    { icon: Download, text: "Export detailed reports", included: true },
-    { icon: Shield, text: "Priority customer support", included: true },
-    { icon: Calendar, text: "Historical data (12+ months)", included: true },
-    { icon: CreditCard, text: "Revenue attribution tracking", included: true },
+  // Plan configurations
+  const plans = [
+    {
+      name: 'Starter',
+      price: 49,
+      description: 'Perfect for small stores getting started',
+      popular: false,
+      features: [
+        'Up to 10 brands/vendors',
+        '90-day data history',
+        'Core analytics dashboard',
+        'Email support',
+        'CSV export'
+      ]
+    },
+    {
+      name: 'Growth',
+      price: 99,
+      description: 'Ideal for growing businesses',
+      popular: true,
+      features: [
+        'Up to 50 brands/vendors',
+        '1-year data history',
+        'Advanced analytics',
+        'Priority support',
+        'Custom reports'
+      ]
+    },
+    {
+      name: 'Scale',
+      price: 199,
+      description: 'Built for enterprise and high-volume stores',
+      popular: false,
+      features: [
+        'Unlimited brands/vendors',
+        '5-year data history',
+        'White-label reports',
+        'Priority support',
+        'Custom reports'
+      ]
+    }
   ];
 
-  // Future plans (for display purposes)
-  // Single BrandSight Premium plan - $69/month billed through Shopify
-  const currentPlan = {
-    name: "BrandSight Premium",
-    price: 69,
-    period: "month",
-    description: "Advanced vendor analytics for your Shopify store",
-    features: premiumFeatures
+  // Get current plan from billing status
+  const getCurrentPlan = () => {
+    if (!isShopifyMode) return null;
+    if (!billingStatus?.subscription?.name) return null;
+    return billingStatus.subscription.name;
   };
+
+  const currentPlan = getCurrentPlan();
 
   if (!isAuthenticated) {
     return (
@@ -207,8 +242,10 @@ export default function Billing() {
                       <div className="space-y-6">
                         <div className="flex items-center justify-between">
                           <div>
-                            <h3 className="text-lg font-semibold text-gray-900">BrandSight Premium</h3>
-                            <p className="text-sm text-gray-600">$69.00 per month • Billed through Shopify</p>
+                            <h3 className="text-lg font-semibold text-gray-900">{currentPlan}</h3>
+                            <p className="text-sm text-gray-600">
+                              ${plans.find(p => p.name === currentPlan)?.price || 0}.00 per month • Billed through Shopify
+                            </p>
                           </div>
                           <div className="flex items-center gap-2">
                             {(billingStatus as any)?.isInTrial && (
@@ -250,7 +287,7 @@ export default function Billing() {
                             <AlertDescription>
                               Your free trial ends on{' '}
                               {new Date((billingStatus as any)?.subscription?.currentPeriodEnd).toLocaleDateString()}.
-                              You'll be automatically charged $69.00 through Shopify unless you cancel before then.
+                              You'll be automatically charged ${plans.find(p => p.name === currentPlan)?.price || 0}.00 through Shopify unless you cancel before then.
                             </AlertDescription>
                           </Alert>
                         )}
@@ -272,7 +309,7 @@ export default function Billing() {
                               <AlertDialogHeader>
                                 <AlertDialogTitle>Cancel Subscription</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Are you sure you want to cancel your BrandSight Premium subscription? 
+                                  Are you sure you want to cancel your {currentPlan} subscription? 
                                   You'll continue to have access until the end of your current billing period.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
@@ -297,13 +334,85 @@ export default function Billing() {
                           <CreditCard className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                           <h3 className="text-lg font-semibold text-gray-900 mb-2">No Active Subscription</h3>
                           <p className="text-gray-600 mb-4">
-                            Subscribe to BrandSight Premium ($69/month) through Shopify to unlock advanced vendor analytics
+                            Choose a plan below to start your 3-day free trial and unlock advanced vendor analytics
                           </p>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+              </div>
+
+            </div>
+
+            {/* Pricing Plans */}
+            <div className="space-y-6">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">Choose Your Plan</h2>
+                <p className="text-gray-600">
+                  All plans include a 3-day free trial, automatic updates, and secure data encryption
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {plans.map((plan) => (
+                  <Card key={plan.name} className={`relative ${
+                    plan.popular ? 'ring-2 ring-brand-500 shadow-lg' : ''
+                  } ${currentPlan === plan.name ? 'ring-2 ring-green-500' : ''}`}>
+                    {plan.popular && (
+                      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                        <Badge className="bg-brand-600 text-white px-3 py-1">
+                          Most Popular
+                        </Badge>
+                      </div>
+                    )}
+                    {currentPlan === plan.name && (
+                      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                        <Badge className="bg-green-600 text-white px-3 py-1">
+                          Current Plan
+                        </Badge>
+                      </div>
+                    )}
+                    
+                    <CardHeader className="text-center pb-4">
+                      <CardTitle className="text-xl">{plan.name}</CardTitle>
+                      <CardDescription className="text-sm">{plan.description}</CardDescription>
+                      <div className="py-4">
+                        <div className="flex items-baseline justify-center gap-1">
+                          <span className="text-4xl font-bold text-gray-900">${plan.price}</span>
+                          <span className="text-gray-600">/month</span>
+                        </div>
+                        <p className="text-sm text-gray-500 mt-1">Billed through Shopify</p>
+                      </div>
+                    </CardHeader>
+                    
+                    <CardContent className="space-y-4">
+                      <div className="space-y-3">
+                        {plan.features.map((feature, index) => (
+                          <div key={index} className="flex items-start gap-3">
+                            <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0 mt-0.5" />
+                            <span className="text-sm text-gray-700">{feature}</span>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      <div className="pt-4">
+                        {currentPlan === plan.name ? (
+                          <Button disabled className="w-full bg-green-100 text-green-800 hover:bg-green-100">
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                            Current Plan
+                          </Button>
+                        ) : isShopifyMode && !currentPlan ? (
                           <Button
-                            onClick={() => subscribeMutation.mutate()}
+                            onClick={() => subscribeMutation.mutate(plan.name)}
                             disabled={subscribeMutation.isPending || isProcessing}
-                            className="bg-brand-600 hover:bg-brand-700"
-                            data-testid="button-subscribe"
+                            className={`w-full ${
+                              plan.popular 
+                                ? 'bg-brand-600 hover:bg-brand-700' 
+                                : 'bg-gray-800 hover:bg-gray-900'
+                            }`}
+                            data-testid={`button-subscribe-${plan.name.toLowerCase()}`}
                           >
                             {subscribeMutation.isPending || isProcessing ? (
                               <>
@@ -317,43 +426,56 @@ export default function Billing() {
                               </>
                             )}
                           </Button>
-                        </div>
+                        ) : !isShopifyMode ? (
+                          <Button disabled className="w-full bg-purple-100 text-purple-800 hover:bg-purple-100">
+                            Demo Mode
+                          </Button>
+                        ) : (
+                          <Button
+                            onClick={() => subscribeMutation.mutate(plan.name)}
+                            disabled={subscribeMutation.isPending || isProcessing}
+                            variant="outline"
+                            className="w-full"
+                            data-testid={`button-upgrade-${plan.name.toLowerCase()}`}
+                          >
+                            Upgrade to {plan.name}
+                          </Button>
+                        )}
                       </div>
-                    )}
-                  </CardContent>
-                </Card>
-
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
-
-              {/* Plan Details & Features */}
-              <div className="space-y-6">
+              
+              {/* Additional Information */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-center">
-                      Premium Features
+                    <CardTitle className="flex items-center gap-2">
+                      <Shield className="h-5 w-5" />
+                      All Plans Include
                     </CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {premiumFeatures.map((feature, index) => {
-                        const Icon = feature.icon;
-                        return (
-                          <div key={index} className="flex items-center gap-3">
-                            <div className="flex-shrink-0">
-                              <CheckCircle className="h-4 w-4 text-green-500" />
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Icon className="h-4 w-4 text-gray-600" />
-                              <span className="text-sm text-gray-700">{feature.text}</span>
-                            </div>
-                          </div>
-                        );
-                      })}
+                  <CardContent className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                      <span className="text-sm">3-day free trial</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                      <span className="text-sm">Automatic updates</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                      <span className="text-sm">Secure data encryption</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                      <span className="text-sm">Cancel anytime</span>
                     </div>
                   </CardContent>
                 </Card>
-
-                {/* Quick Actions */}
+                
                 <Card>
                   <CardHeader>
                     <CardTitle>Need Help?</CardTitle>
@@ -363,53 +485,13 @@ export default function Billing() {
                       <Shield className="h-4 w-4 mr-2" />
                       Contact Support
                     </Button>
+                    <p className="text-sm text-gray-600">
+                      Questions about plans or need a custom solution? Our team is here to help.
+                    </p>
                   </CardContent>
                 </Card>
               </div>
             </div>
-
-            {/* Billing Information */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-center">
-                  {currentPlan.name}
-                </CardTitle>
-                <CardDescription className="text-center">
-                  {currentPlan.description}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center mb-6">
-                  <div className="flex items-baseline justify-center gap-1 mb-2">
-                    <span className="text-3xl font-bold text-gray-900">
-                      ${currentPlan.price}
-                    </span>
-                    <span className="text-gray-600">/{currentPlan.period}</span>
-                  </div>
-                  <p className="text-sm text-gray-600">
-                    Billed through Shopify • 3-day free trial included
-                  </p>
-                </div>
-
-                <div className="max-w-md mx-auto">
-                  <h4 className="text-sm font-medium text-gray-900 mb-3">What's included:</h4>
-                  <div className="space-y-2">
-                    {currentPlan.features.slice(0, 6).map((feature, index) => {
-                      const Icon = feature.icon;
-                      return (
-                        <div key={index} className="flex items-center gap-3">
-                          <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
-                          <div className="flex items-center gap-2">
-                            <Icon className="h-4 w-4 text-gray-600" />
-                            <span className="text-sm text-gray-700">{feature.text}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </main>
       </div>

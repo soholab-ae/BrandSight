@@ -121,6 +121,27 @@ export const orderLineItems = pgTable("order_line_items", {
   index("IDX_order_line_items_product_id").on(table.productId),
 ]);
 
+// Store subscriptions
+export const subscriptions = pgTable("subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  storeId: varchar("store_id").notNull().references(() => stores.id),
+  shopifySubscriptionId: varchar("shopify_subscription_id"),
+  planName: varchar("plan_name").notNull(), // 'Starter', 'Growth', 'Scale'
+  status: varchar("status").notNull(), // 'active', 'cancelled', 'expired', 'trial'
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: varchar("currency").default("USD"),
+  trialEndsAt: timestamp("trial_ends_at"),
+  currentPeriodStart: timestamp("current_period_start"),
+  currentPeriodEnd: timestamp("current_period_end"),
+  cancelledAt: timestamp("cancelled_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("IDX_subscriptions_store_id").on(table.storeId),
+  index("IDX_subscriptions_status").on(table.status),
+  index("IDX_subscriptions_shopify_id").on(table.shopifySubscriptionId),
+]);
+
 // Analytics aggregated data
 export const vendorAnalytics = pgTable("vendor_analytics", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -179,6 +200,12 @@ export const insertOrderSchema = createInsertSchema(orders).omit({
 
 export const insertOrderLineItemSchema = createInsertSchema(orderLineItems);
 
+export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertVendorAnalyticsSchema = createInsertSchema(vendorAnalytics).omit({
   id: true,
   createdAt: true,
@@ -208,6 +235,9 @@ export type InsertVendorAnalytics = z.infer<typeof insertVendorAnalyticsSchema>;
 
 export type PageAnalytics = typeof pageAnalytics.$inferSelect;
 
+export type Subscription = typeof subscriptions.$inferSelect;
+export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
+
 // Pagination types
 export interface PaginationParams {
   page?: number;
@@ -216,6 +246,7 @@ export interface PaginationParams {
   sortBy?: string;
   sortDirection?: 'asc' | 'desc';
   search?: string;
+  vendorId?: string;
 }
 
 export interface PaginatedResponse<T> {
@@ -231,6 +262,50 @@ export interface PaginatedResponse<T> {
     prevCursor?: string;
   };
 }
+
+// Subscription plan configurations
+export interface PlanFeatures {
+  vendorLimit: number; // -1 for unlimited
+  dataHistoryDays: number;
+  features: string[];
+  displayFeatures: string[];
+}
+
+export interface PlanConfig {
+  name: string;
+  amount: number;
+  currencyCode: string;
+  trialDays: number;
+  features: PlanFeatures;
+}
+
+// Plan restriction checker
+export interface PlanRestrictions {
+  canAddVendor: (currentCount: number) => boolean;
+  canAccessData: (date: Date) => boolean;
+  hasFeature: (feature: string) => boolean;
+  vendorLimit: number;
+  dataHistoryDays: number;
+}
+
+// Plan names enum
+export const PLAN_NAMES = {
+  STARTER: 'Starter',
+  GROWTH: 'Growth', 
+  SCALE: 'Scale'
+} as const;
+
+export type PlanName = typeof PLAN_NAMES[keyof typeof PLAN_NAMES];
+
+// Subscription status enum
+export const SUBSCRIPTION_STATUS = {
+  ACTIVE: 'active',
+  CANCELLED: 'cancelled',
+  EXPIRED: 'expired',
+  TRIAL: 'trial'
+} as const;
+
+export type SubscriptionStatus = typeof SUBSCRIPTION_STATUS[keyof typeof SUBSCRIPTION_STATUS];
 
 // Vendor metrics for optimized queries
 export interface VendorMetrics {

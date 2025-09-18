@@ -1,5 +1,5 @@
 import { storage } from "../storage";
-import type { Store, InsertProduct, InsertOrder, InsertOrderLineItem } from "@shared/schema";
+import type { Store, Vendor, InsertProduct, InsertOrder, InsertOrderLineItem } from "@shared/schema";
 import { cacheService, CacheKeyBuilder } from "./cacheService";
 import { TokenEncryption } from "./tokenEncryption";
 
@@ -202,7 +202,7 @@ export class ShopifyService {
       
       // Prefetch all vendors with caching to eliminate N+1 queries (O(1) lookups)
       const vendorCacheKey = CacheKeyBuilder.vendors(store.id);
-      let existingVendors = cacheService.getSync(vendorCacheKey);
+      let existingVendors = cacheService.getSync<Vendor[]>(vendorCacheKey);
       
       if (!existingVendors) {
         // Cache miss - fetch from database
@@ -214,7 +214,7 @@ export class ShopifyService {
         console.log(`Vendor cache hit for store ${store.id}, using ${existingVendors.length} cached vendors`);
       }
       
-      const vendorMap = new Map(existingVendors.map(v => [v.name, v]));
+      const vendorMap = new Map(existingVendors.map((v: Vendor) => [v.name, v]));
       
       // Track new vendors to create in bulk
       const newVendorsToCreate = new Set<string>();
@@ -246,14 +246,45 @@ export class ShopifyService {
           }
         }
         
-        // Create new vendors in bulk
-        for (const vendorName of Array.from(newVendorsToCreate)) {
-          const newVendor = await storage.createVendor({
-            storeId: store.id,
-            name: vendorName,
-            slug: vendorName.toLowerCase().replace(/\s+/g, '-'),
-          });
-          vendorMap.set(vendorName, newVendor);
+        // Create new vendors in bulk with plan limit enforcement
+        if (newVendorsToCreate.size > 0) {
+          const { getStorePlanRestrictions } = await import('../shopifyBilling');
+          const planRestrictions = await getStorePlanRestrictions(store.id);
+          const currentVendorCount = existingVendors.length;
+          
+          // Check if creating new vendors would exceed plan limit
+          const newVendorCount = currentVendorCount + newVendorsToCreate.size;
+          if (!planRestrictions.canAddVendor(newVendorCount - 1)) {
+            console.warn(`Plan limit exceeded: Cannot create ${newVendorsToCreate.size} new vendors. Current: ${currentVendorCount}, Limit: ${planRestrictions.vendorLimit}, Plan: ${planRestrictions.planName}`);
+            
+            // If we're at the limit, only create up to the limit
+            const allowedNewVendors = Math.max(0, planRestrictions.vendorLimit - currentVendorCount);
+            if (allowedNewVendors > 0) {
+              const vendorsToCreate = Array.from(newVendorsToCreate).slice(0, allowedNewVendors);
+              console.log(`Creating ${allowedNewVendors} vendors up to plan limit (${planRestrictions.planName})`);
+              
+              for (const vendorName of vendorsToCreate) {
+                const newVendor = await storage.createVendor({
+                  storeId: store.id,
+                  name: vendorName,
+                  slug: vendorName.toLowerCase().replace(/\s+/g, '-'),
+                });
+                vendorMap.set(vendorName, newVendor);
+              }
+            } else {
+              console.warn(`Vendor limit reached. Cannot create any new vendors. Plan: ${planRestrictions.planName}, Limit: ${planRestrictions.vendorLimit}`);
+            }
+          } else {
+            // Within plan limits, create all vendors
+            for (const vendorName of Array.from(newVendorsToCreate)) {
+              const newVendor = await storage.createVendor({
+                storeId: store.id,
+                name: vendorName,
+                slug: vendorName.toLowerCase().replace(/\s+/g, '-'),
+              });
+              vendorMap.set(vendorName, newVendor);
+            }
+          }
         }
         
         // Invalidate vendor cache if new vendors were created
@@ -336,7 +367,7 @@ export class ShopifyService {
       
       // Prefetch vendors for order line items
       const existingVendors = await storage.getStoreVendors(store.id);
-      const vendorMap = new Map(existingVendors.map(v => [v.name, v]));
+      const vendorMap = new Map(existingVendors.map((v: Vendor) => [v.name, v]));
 
       while (hasNextPage) {
         const params: Record<string, string> = { 
@@ -616,11 +647,22 @@ export class ShopifyService {
       );
 
       if (!vendor && productData.vendor) {
-        vendor = await storage.createVendor({
-          storeId: storeId,
-          name: productData.vendor,
-          slug: productData.vendor.toLowerCase().replace(/\s+/g, '-'),
-        });
+        // Check plan limits before creating vendor
+        const { getStorePlanRestrictions } = await import('../shopifyBilling');
+        const planRestrictions = await getStorePlanRestrictions(storeId);
+        const currentVendors = await storage.getStoreVendors(storeId);
+        
+        if (planRestrictions.canAddVendor(currentVendors.length)) {
+          vendor = await storage.createVendor({
+            storeId: storeId,
+            name: productData.vendor,
+            slug: productData.vendor.toLowerCase().replace(/\s+/g, '-'),
+          });
+          console.log(`Created new vendor "${productData.vendor}" for store ${storeId}. Plan: ${planRestrictions.planName}`);
+        } else {
+          console.warn(`Cannot create vendor "${productData.vendor}": Plan limit exceeded. Current: ${currentVendors.length}, Limit: ${planRestrictions.vendorLimit}, Plan: ${planRestrictions.planName}`);
+          // Don't create the vendor, but continue processing the product without vendor assignment
+        }
       }
 
       // Create or update product

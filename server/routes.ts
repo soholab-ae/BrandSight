@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { shopifyService } from "./services/shopifyService";
 import { insertStoreSchema } from "@shared/schema";
-import { createBillingSubscription, checkActiveSubscription, cancelSubscription } from "./shopifyBilling";
+import { createBillingSubscription, checkActiveSubscription, cancelSubscription, createPlanEnforcementMiddleware } from "./shopifyBilling";
 import { cacheService, CacheKeyBuilder } from "./services/cacheService";
 import * as csv from 'fast-csv';
 import * as XLSX from 'xlsx';
@@ -14,7 +14,7 @@ import type { Response } from "express";
 // Streaming export functions
 async function streamVendorCSVExport(
   storeId: string,
-  params: { sortBy: string; sortDirection: 'asc' | 'desc'; search?: string },
+  params: { sortBy: string; sortDirection: 'asc' | 'desc'; search?: string; vendorId?: string },
   res: Response,
   dateRange?: string
 ) {
@@ -66,7 +66,9 @@ async function streamVendorCSVExport(
           limit: batchSize,
           sortBy: params.sortBy,
           sortDirection: params.sortDirection,
-          search: params.search
+          search: params.search,
+          vendorId: params.vendorId,
+          planRestrictions: req?.planRestrictions
         });
         
         // Write batch data to CSV
@@ -97,7 +99,7 @@ async function streamVendorCSVExport(
 
 async function streamVendorExcelExport(
   storeId: string,
-  params: { sortBy: string; sortDirection: 'asc' | 'desc'; search?: string },
+  params: { sortBy: string; sortDirection: 'asc' | 'desc'; search?: string; vendorId?: string },
   res: Response,
   dateRange?: string
 ) {
@@ -116,7 +118,9 @@ async function streamVendorExcelExport(
         limit: batchSize,
         sortBy: params.sortBy,
         sortDirection: params.sortDirection,
-        search: params.search
+        search: params.search,
+        vendorId: params.vendorId,
+        planRestrictions: req.planRestrictions
       });
       
       allVendors.push(...result.data);
@@ -215,6 +219,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Unified authentication middleware with demo mode support
   const authenticate = useShopifyAuth ? authenticateShopify : isAuthenticated;
+  
+  // Plan enforcement middleware
+  const planEnforcement = createPlanEnforcementMiddleware();
   
   // Flexible authentication that allows demo mode
   const authenticateOrDemo = (req: any, res: any, next: any) => {
@@ -738,7 +745,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Current store routes (automatically use user's first store)
-  app.get('/api/stores/current/vendors', authenticateOrDemo, async (req: any, res) => {
+  app.get('/api/stores/current/vendors', authenticateOrDemo, planEnforcement, async (req: any, res) => {
     try {
       const store = await getUserCurrentStore(req);
       const { page, limit, sortBy, sortDirection, search, paginated } = req.query;
@@ -782,7 +789,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Paginated vendor metrics endpoint
-  app.get('/api/stores/current/vendors/metrics', authenticateOrDemo, async (req: any, res) => {
+  app.get('/api/stores/current/vendors/metrics', authenticateOrDemo, planEnforcement, async (req: any, res) => {
     try {
       const store = await getUserCurrentStore(req);
       const { page, limit, sortBy, sortDirection, search } = req.query;
@@ -795,7 +802,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         search: search as string
       };
       
-      const result = await storage.getStoreVendorMetrics(store.id, paginationParams);
+      const result = await storage.getStoreVendorMetrics(store.id, { 
+        ...paginationParams, 
+        planRestrictions: req.planRestrictions 
+      });
       res.json(result);
     } catch (error) {
       console.error("Error fetching vendor metrics:", error);
@@ -804,15 +814,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Server-side CSV export for vendor metrics
-  app.get('/api/stores/current/vendors/export/csv', authenticateOrDemo, async (req: any, res) => {
+  app.get('/api/stores/current/vendors/export/csv', authenticateOrDemo, planEnforcement, async (req: any, res) => {
     try {
       const store = await getUserCurrentStore(req);
-      const { search, sortBy, sortDirection, dateRange } = req.query;
+      const { search, sortBy, sortDirection, dateRange, vendorId } = req.query;
       
       const exportParams = {
         sortBy: sortBy as string || 'revenue',
         sortDirection: (sortDirection as 'asc' | 'desc') || 'desc',
-        search: search as string
+        search: search as string,
+        vendorId: vendorId as string
       };
       
       // Set response headers for file download
@@ -832,15 +843,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Server-side Excel export for vendor metrics
-  app.get('/api/stores/current/vendors/export/excel', authenticateOrDemo, async (req: any, res) => {
+  app.get('/api/stores/current/vendors/export/excel', authenticateOrDemo, planEnforcement, async (req: any, res) => {
     try {
       const store = await getUserCurrentStore(req);
-      const { search, sortBy, sortDirection, dateRange } = req.query;
+      const { search, sortBy, sortDirection, dateRange, vendorId } = req.query;
       
       const exportParams = {
         sortBy: sortBy as string || 'revenue',
         sortDirection: (sortDirection as 'asc' | 'desc') || 'desc',
-        search: search as string
+        search: search as string,
+        vendorId: vendorId as string
       };
       
       // Set response headers for file download
@@ -877,7 +889,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/stores/current/analytics/summary', authenticateOrDemo, async (req: any, res) => {
+  app.get('/api/stores/current/analytics/summary', authenticateOrDemo, planEnforcement, async (req: any, res) => {
     try {
       const store = await getUserCurrentStore(req);
       const { vendorId, startDate, endDate } = req.query;
@@ -914,7 +926,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/stores/current/products/top', authenticateOrDemo, async (req: any, res) => {
+  app.get('/api/stores/current/products/top', authenticateOrDemo, planEnforcement, async (req: any, res) => {
     try {
       const store = await getUserCurrentStore(req);
       const { vendorId, limit, page, sortBy, sortDirection, paginated } = req.query;
@@ -986,7 +998,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Paginated vendor analytics endpoint
-  app.get('/api/stores/current/analytics/paginated', authenticateOrDemo, async (req: any, res) => {
+  app.get('/api/stores/current/analytics/paginated', authenticateOrDemo, planEnforcement, async (req: any, res) => {
     try {
       const store = await getUserCurrentStore(req);
       const { page, limit, sortBy, sortDirection, vendorId, startDate, endDate } = req.query;
@@ -1012,7 +1024,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/stores/current/pages/top', authenticateOrDemo, async (req: any, res) => {
+  app.get('/api/stores/current/pages/top', authenticateOrDemo, planEnforcement, async (req: any, res) => {
     try {
       const store = await getUserCurrentStore(req);
       const { vendorId, limit } = req.query;
@@ -1278,15 +1290,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Billing routes (only for Shopify auth)
   if (useShopifyAuth) {
     // Check subscription status
-    app.get('/api/billing/status', authenticate, async (req: any, res) => {
+    app.get('/api/billing/status', authenticateOrDemo, async (req: any, res) => {
       try {
-        const session = req.shopifySession;
+        // Handle demo mode
+        if (req.isDemoMode || req.user?.isDemoMode) {
+          return res.json({
+            isDemo: true,
+            hasActiveSubscription: true,
+            subscription: {
+              id: 'demo_subscription',
+              name: 'Demo',
+              status: 'ACTIVE',
+              test: true,
+              trialDays: 0,
+              currentPeriodEnd: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+              createdAt: new Date().toISOString()
+            },
+            isInTrial: false,
+            planFeatures: {
+              vendorLimit: -1,
+              dataHistoryDays: 1825,
+              features: ['core-analytics', 'advanced-analytics', 'custom-reports', 'csv-export', 'excel-export']
+            }
+          });
+        }
+
+        const session = res.locals.shopify?.session || req.shopifySession;
         if (!session) {
           return res.status(401).json({ message: "No Shopify session found" });
         }
         
         const subscriptionStatus = await checkActiveSubscription(session);
-        res.json(subscriptionStatus);
+        
+        // Add plan features to the response
+        const planName = subscriptionStatus.subscription?.name || 'Starter';
+        const planFeatures = getPlanRestrictions(planName);
+        
+        res.json({
+          ...subscriptionStatus,
+          isDemo: false,
+          planFeatures
+        });
       } catch (error) {
         console.error("Error checking subscription status:", error);
         res.status(500).json({ message: "Failed to check subscription status" });
@@ -1296,7 +1340,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Create subscription
     app.post('/api/billing/subscribe', authenticate, async (req: any, res) => {
       try {
-        const session = req.shopifySession;
+        const session = res.locals.shopify?.session || req.shopifySession;
         if (!session) {
           return res.status(401).json({ message: "No Shopify session found" });
         }
@@ -1310,10 +1354,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
         
+        // Validate planName matches our available plans
+        const validPlanNames = ["Starter", "Growth", "Scale"];
+        const planName = req.body.planName || "Starter";
+        
+        if (!validPlanNames.includes(planName)) {
+          return res.status(400).json({ 
+            message: "Invalid plan name. Must be one of: " + validPlanNames.join(", ")
+          });
+        }
+        
         // Create new subscription
         const { subscription, confirmationUrl } = await createBillingSubscription(
           session,
-          req.body.planName || "BrandSight Premium"
+          planName
         );
         
         res.json({ 
@@ -1330,7 +1384,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Cancel subscription
     app.post('/api/billing/cancel', authenticate, async (req: any, res) => {
       try {
-        const session = req.shopifySession;
+        const session = res.locals.shopify?.session || req.shopifySession;
         if (!session) {
           return res.status(401).json({ message: "No Shopify session found" });
         }
@@ -1361,6 +1415,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         console.error("Error in billing callback:", error);
         res.redirect('/?billing=error');
+      }
+    });
+  } else {
+    // For non-Shopify auth mode (demo mode), provide a simple billing endpoint
+    app.get('/api/billing/status', authenticateOrDemo, async (req: any, res) => {
+      try {
+        // Always return demo billing data for non-Shopify mode
+        return res.json({
+          isDemo: true,
+          hasActiveSubscription: true,
+          subscription: {
+            id: 'demo_subscription',
+            name: 'Demo',
+            status: 'ACTIVE',
+            test: true,
+            trialDays: 0,
+            currentPeriodEnd: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+            createdAt: new Date().toISOString()
+          },
+          isInTrial: false,
+          planFeatures: {
+            vendorLimit: -1,
+            dataHistoryDays: 1825,
+            features: ['core-analytics', 'advanced-analytics', 'custom-reports', 'csv-export', 'excel-export']
+          }
+        });
+      } catch (error) {
+        console.error("Error checking billing status:", error);
+        res.status(500).json({ message: "Failed to check billing status" });
       }
     });
   }

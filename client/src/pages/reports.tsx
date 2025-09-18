@@ -36,11 +36,73 @@ export default function ExportReports() {
     analytics: true
   });
 
-  const handleExport = () => {
-    toast({
-      title: "Export started",
-      description: `Your ${format.toUpperCase()} report is being generated. You'll receive an email when it's ready.`,
-    });
+  // Export loading state
+  const [isExporting, setIsExporting] = useState(false);
+  
+  const handleExport = async (reportType?: string, exportFormat?: string) => {
+    setIsExporting(true);
+    
+    try {
+      const actualFormat = exportFormat || format;
+      const actualReportType = reportType || 'vendor-performance';
+      
+      // Build export URL based on format
+      const exportUrl = actualFormat === 'csv' 
+        ? '/api/stores/current/vendors/export/csv'
+        : '/api/stores/current/vendors/export/excel';
+      
+      // Add query parameters for filtering
+      const params = new URLSearchParams({
+        dateRange,
+        sortBy: 'revenue',
+        sortDirection: 'desc'
+      });
+      
+      // Create a temporary link element to trigger download
+      const link = document.createElement('a');
+      link.href = `${exportUrl}?${params.toString()}`;
+      link.download = `brandsight-${actualReportType}-${new Date().toISOString().split('T')[0]}.${actualFormat}`;
+      
+      // Set headers for download
+      const response = await fetch(`${exportUrl}?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+          'Accept': actualFormat === 'csv' ? 'text/csv' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Export failed');
+      }
+      
+      // Get the blob and create download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      link.href = url;
+      
+      // Trigger download
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // Clean up
+      window.URL.revokeObjectURL(url);
+      
+      toast({
+        title: "Export completed",
+        description: `Your ${actualFormat.toUpperCase()} report has been downloaded successfully.`,
+      });
+      
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({
+        title: "Export failed",
+        description: "Unable to export report. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   // Redirect to home if not authenticated
@@ -155,11 +217,12 @@ export default function ExportReports() {
                   <CardContent>
                     <Button 
                       className="w-full" 
-                      onClick={handleExport}
+                      onClick={() => handleExport(template.id, 'csv')}
+                      disabled={isExporting}
                       data-testid={`button-export-${template.id}`}
                     >
                       <FileDown className="mr-2 h-4 w-4" />
-                      Generate Report
+                      {isExporting ? 'Generating...' : 'Generate Report'}
                     </Button>
                   </CardContent>
                 </Card>
@@ -251,11 +314,12 @@ export default function ExportReports() {
                 <Button 
                   className="w-full" 
                   size="lg" 
-                  onClick={handleExport}
+                  onClick={() => handleExport('custom', format)}
+                  disabled={isExporting}
                   data-testid="button-custom-export"
                 >
                   <FileSpreadsheet className="mr-2 h-4 w-4" />
-                  Generate Custom Report
+                  {isExporting ? 'Generating...' : 'Generate Custom Report'}
                 </Button>
               </div>
             </CardContent>
