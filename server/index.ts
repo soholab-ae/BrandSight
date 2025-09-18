@@ -26,17 +26,28 @@ app.use((req, res, next) => {
                req.headers['x-shopify-shop'] as string ||
                process.env.DEFAULT_SHOP_DOMAIN;
   
+  // Base CSP directives for proper app functionality
+  const baseCsp = [
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data:",
+    "connect-src 'self' ws: wss: https:",
+    "object-src 'none'",
+    "base-uri 'self'"
+  ].join('; ');
+  
   if (shop) {
     // Set Content-Security-Policy to allow embedding in Shopify admin
     res.setHeader(
       'Content-Security-Policy',
-      `frame-ancestors https://${shop} https://admin.shopify.com;`
+      `${baseCsp}; frame-ancestors https://${shop} https://admin.shopify.com;`
     );
   } else {
     // For non-embedded contexts, allow self
     res.setHeader(
       'Content-Security-Policy',
-      `frame-ancestors 'self';`
+      `${baseCsp}; frame-ancestors 'self';`
     );
   }
   
@@ -109,12 +120,7 @@ if (app.get('env') === 'development') {
   });
 }
 
-// Only add root health check in development to avoid intercepting SPA in production
-if (app.get('env') === 'development') {
-  app.get('/', (_req, res) => {
-    res.status(200).json({ status: 'ok', message: 'Server is running in development' });
-  });
-}
+// Development root health check removed to avoid intercepting React app routing
 
 
 (async () => {

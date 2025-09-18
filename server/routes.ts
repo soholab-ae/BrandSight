@@ -417,11 +417,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log('[AUTH DEBUG] Shop:', shop, 'Host:', host);
         
         if (!shop) {
-          const loginUrl = `/api/login?${new URLSearchParams({ 
-            ...(host && { host }) 
-          }).toString()}`;
-          console.log('[AUTH DEBUG] No shop context, returning 401 with loginUrl:', loginUrl);
-          return res.status(401).json({ loginUrl });
+          // Enable demo mode when no shop context is provided
+          console.log('[AUTH DEBUG] No shop context, enabling demo mode');
+          const demoUser = {
+            id: "demo_user",
+            email: "demo@example.com", 
+            firstName: "Demo",
+            lastName: "User",
+            profileImageUrl: null
+          };
+          return res.json(demoUser);
         }
         
         // Try to validate authenticated session first
