@@ -517,7 +517,7 @@ export async function setupShopifyAuth(app: Express) {
   app.use((req, res, next) => {
     const shop = req.query.shop || req.headers['x-shopify-shop-domain'];
     
-    if (shop || req.path === '/' || req.path.startsWith('/welcome')) {
+    if (shop || req.path === '/' || req.path.startsWith('/welcome') || req.path.startsWith('/dashboard')) {
       // Modify only the frame-ancestors directive, keeping other CSP rules
       const existingCSP = res.getHeader('Content-Security-Policy') as string || '';
       
@@ -610,9 +610,9 @@ export async function setupShopifyAuth(app: Express) {
         const host = req.query.host as string;
         const shop = session.shop;
         
-        // Redirect to the embedded app with shop and host parameters
-        // This ensures the app loads properly in Shopify admin
-        const redirectUrl = `/?shop=${encodeURIComponent(shop)}${host ? `&host=${encodeURIComponent(host)}` : ''}`;
+        // Redirect to the embedded app dashboard with shop and host parameters
+        // This ensures the app loads properly in Shopify admin and skips the welcome page
+        const redirectUrl = `/dashboard?shop=${encodeURIComponent(shop)}${host ? `&host=${encodeURIComponent(host)}` : ''}`;
         console.log(`Auth successful for ${shop}, redirecting to: ${redirectUrl}`);
         res.redirect(redirectUrl);
       } else {
