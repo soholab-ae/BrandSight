@@ -1,5 +1,5 @@
 name = "BrandSight"
-client_id = "c7757dd8317e938754cef77d03490eb2"
+client_id = "${SHOPIFY_API_KEY}"
 application_url = "https://brandsight.replit.app"
 embedded = true
 
