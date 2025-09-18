@@ -68,7 +68,7 @@ Your app now properly handles all required webhooks:
 ```toml
 # Your shopify.app.toml is now correctly configured:
 name = "BrandSight"
-client_id = "c7757dd8317e938754cef77d03490eb2"
+client_id = "${SHOPIFY_API_KEY}"
 application_url = "https://brandsight.replit.app"
 embedded = true
 
@@ -116,8 +116,8 @@ Verify these environment variables are set correctly in your Replit deployment:
 
 ```bash
 # Required for production
-SHOPIFY_API_KEY=c7757dd8317e938754cef77d03490eb2
-SHOPIFY_API_SECRET=1a4bb0b07180bfc4d0145688343ca524
+SHOPIFY_API_KEY=your_shopify_api_key_here
+SHOPIFY_API_SECRET=your_shopify_api_secret_here
 SCOPES=read_products,read_orders,read_customers
 HOST=https://brandsight.replit.app  # Verify this matches your Replit URL ✅
 
