@@ -4376,25 +4376,86 @@ function ensureStaticDir() {
   const expectedPath = path3.resolve(import.meta.dirname, "public");
   const distPublicPath = path3.resolve(import.meta.dirname, "..", "dist", "public");
   const distAssetsPath = path3.resolve(distPublicPath, "assets");
-  if (fs2.existsSync(distAssetsPath)) {
-    if (fs2.existsSync(expectedPath)) {
-      try {
-        fs2.rmSync(expectedPath, { recursive: true, force: true });
-        log(`Removed existing server/public to use fresh dist/public`);
-      } catch (error) {
-        log(`Warning: Could not remove existing server/public: ${error}`);
-      }
-    }
+  const distPath = path3.resolve(import.meta.dirname, "..", "dist");
+  log(`Checking build directories: dist=${fs2.existsSync(distPath)}, dist/public=${fs2.existsSync(distPublicPath)}, assets=${fs2.existsSync(distAssetsPath)}`);
+  if (!fs2.existsSync(distPath)) {
     try {
-      fs2.symlinkSync(distPublicPath, expectedPath, "junction");
-      log(`Created symlink: ${expectedPath} -> ${distPublicPath}`);
-      log(`Assets directory contains: ${fs2.readdirSync(distAssetsPath).length} files`);
-      return;
+      fs2.mkdirSync(distPath, { recursive: true });
+      log(`Created missing dist directory: ${distPath}`);
     } catch (error) {
-      log(`Failed to create symlink: ${error}`);
+      log(`Failed to create dist directory: ${error}`);
     }
   }
-  log(`Warning: Built assets not found at ${distAssetsPath}. Ensure 'npm run build' was run during deployment.`);
+  if (!fs2.existsSync(distPublicPath)) {
+    try {
+      fs2.mkdirSync(distPublicPath, { recursive: true });
+      log(`Created missing dist/public directory: ${distPublicPath}`);
+    } catch (error) {
+      log(`Failed to create dist/public directory: ${error}`);
+    }
+  }
+  if (!fs2.existsSync(distAssetsPath)) {
+    try {
+      fs2.mkdirSync(distAssetsPath, { recursive: true });
+      log(`Created missing assets directory: ${distAssetsPath}`);
+    } catch (error) {
+      log(`Failed to create assets directory: ${error}`);
+    }
+  }
+  if (fs2.existsSync(distAssetsPath)) {
+    const assetFiles = fs2.readdirSync(distAssetsPath);
+    if (assetFiles.length > 0) {
+      if (fs2.existsSync(expectedPath)) {
+        try {
+          fs2.rmSync(expectedPath, { recursive: true, force: true });
+          log(`Removed existing server/public to use fresh dist/public`);
+        } catch (error) {
+          log(`Warning: Could not remove existing server/public: ${error}`);
+        }
+      }
+      try {
+        fs2.symlinkSync(distPublicPath, expectedPath, "junction");
+        log(`Created symlink: ${expectedPath} -> ${distPublicPath}`);
+        log(`Assets directory contains: ${assetFiles.length} files`);
+        return;
+      } catch (error) {
+        log(`Failed to create symlink: ${error}`);
+        try {
+          if (fs2.existsSync(expectedPath)) {
+            fs2.rmSync(expectedPath, { recursive: true, force: true });
+          }
+          copyDirectory(distPublicPath, expectedPath);
+          log(`Fallback: Copied dist/public to server/public`);
+          return;
+        } catch (copyError) {
+          log(`Fallback copy also failed: ${copyError}`);
+        }
+      }
+    } else {
+      log(`Warning: Assets directory exists but is empty: ${distAssetsPath}`);
+    }
+  }
+  log(`Error: Built assets not found. Diagnostics:`);
+  log(`  - dist exists: ${fs2.existsSync(distPath)}`);
+  log(`  - dist/public exists: ${fs2.existsSync(distPublicPath)}`);
+  log(`  - dist/public/assets exists: ${fs2.existsSync(distAssetsPath)}`);
+  log(`  - Ensure 'npm run build' was run during deployment`);
+  log(`  - Consider running 'node build.js' for a more robust build process`);
+}
+function copyDirectory(source, target) {
+  if (!fs2.existsSync(target)) {
+    fs2.mkdirSync(target, { recursive: true });
+  }
+  const files = fs2.readdirSync(source);
+  for (const file of files) {
+    const sourcePath = path3.join(source, file);
+    const targetPath = path3.join(target, file);
+    if (fs2.statSync(sourcePath).isDirectory()) {
+      copyDirectory(sourcePath, targetPath);
+    } else {
+      fs2.copyFileSync(sourcePath, targetPath);
+    }
+  }
 }
 (async () => {
   const server = await registerRoutes(app);
