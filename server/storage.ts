@@ -182,8 +182,8 @@ export class DatabaseStorage implements IStorage {
       return [demoStore];
     }
     
-    const stores = await db.select().from(stores).where(eq(stores.userId, userId));
-    return this.processStoresForOutput(stores);
+    const userStores = await db.select().from(stores).where(eq(stores.userId, userId));
+    return this.processStoresForOutput(userStores);
   }
 
   async createStore(store: InsertStore): Promise<Store> {
@@ -265,25 +265,30 @@ export class DatabaseStorage implements IStorage {
       };
     }
 
-    let query = db.select().from(vendors).where(eq(vendors.storeId, storeId));
-    let countQuery = db.select({ count: sql<number>`count(*)` }).from(vendors).where(eq(vendors.storeId, storeId));
-
+    // Build conditions array
+    let conditions = [eq(vendors.storeId, storeId)];
+    
     // Apply search filter
     if (search) {
       const searchCondition = sql`${vendors.name} ILIKE ${'%' + search + '%'}`;
-      query = query.where(and(eq(vendors.storeId, storeId), searchCondition));
-      countQuery = countQuery.where(and(eq(vendors.storeId, storeId), searchCondition));
+      conditions.push(searchCondition);
     }
 
-    // Apply sorting
-    if (sortBy === 'name') {
-      query = query.orderBy(sortDirection === 'asc' ? asc(vendors.name) : desc(vendors.name));
-    } else if (sortBy === 'createdAt') {
-      query = query.orderBy(sortDirection === 'asc' ? asc(vendors.createdAt) : desc(vendors.createdAt));
-    }
+    // Determine ordering
+    const orderByClause = sortBy === 'name' 
+      ? (sortDirection === 'asc' ? asc(vendors.name) : desc(vendors.name))
+      : (sortDirection === 'asc' ? asc(vendors.createdAt) : desc(vendors.createdAt));
 
-    // Apply pagination
-    query = query.limit(limit).offset(offset);
+    // Build the complete query
+    const query = db.select().from(vendors)
+      .where(and(...conditions))
+      .orderBy(orderByClause)
+      .limit(limit)
+      .offset(offset);
+    
+    const countQuery = db.select({ count: sql<number>`count(*)` })
+      .from(vendors)
+      .where(and(...conditions));
 
     const [data, [{ count: total }]] = await Promise.all([
       query,
@@ -468,24 +473,30 @@ export class DatabaseStorage implements IStorage {
       };
     }
 
-    let query = db.select().from(products).where(eq(products.vendorId, vendorId));
-    let countQuery = db.select({ count: sql<number>`count(*)` }).from(products).where(eq(products.vendorId, vendorId));
-
+    // Build conditions array
+    let conditions = [eq(products.vendorId, vendorId)];
+    
     // Apply search filter
     if (search) {
       const searchCondition = sql`${products.title} ILIKE ${'%' + search + '%'}`;
-      query = query.where(and(eq(products.vendorId, vendorId), searchCondition));
-      countQuery = countQuery.where(and(eq(products.vendorId, vendorId), searchCondition));
+      conditions.push(searchCondition);
     }
 
-    // Apply sorting
-    if (sortBy === 'title') {
-      query = query.orderBy(sortDirection === 'asc' ? asc(products.title) : desc(products.title));
-    } else if (sortBy === 'price') {
-      query = query.orderBy(sortDirection === 'asc' ? asc(products.price) : desc(products.price));
-    }
+    // Determine ordering
+    const orderByClause = sortBy === 'title' 
+      ? (sortDirection === 'asc' ? asc(products.title) : desc(products.title))
+      : (sortDirection === 'asc' ? asc(products.price) : desc(products.price));
 
-    query = query.limit(limit).offset(offset);
+    // Build the complete query
+    const query = db.select().from(products)
+      .where(and(...conditions))
+      .orderBy(orderByClause)
+      .limit(limit)
+      .offset(offset);
+    
+    const countQuery = db.select({ count: sql<number>`count(*)` })
+      .from(products)
+      .where(and(...conditions));
 
     const [data, [{ count: total }]] = await Promise.all([
       query,
@@ -544,26 +555,35 @@ export class DatabaseStorage implements IStorage {
       };
     }
 
-    let query = db.select().from(products).where(eq(products.storeId, storeId));
-    let countQuery = db.select({ count: sql<number>`count(*)` }).from(products).where(eq(products.storeId, storeId));
-
+    // Build conditions array
+    let conditions = [eq(products.storeId, storeId)];
+    
     // Apply search filter
     if (search) {
       const searchCondition = sql`${products.title} ILIKE ${'%' + search + '%'} OR ${products.vendor} ILIKE ${'%' + search + '%'}`;
-      query = query.where(and(eq(products.storeId, storeId), searchCondition));
-      countQuery = countQuery.where(and(eq(products.storeId, storeId), searchCondition));
+      conditions.push(searchCondition);
     }
 
-    // Apply sorting
+    // Determine ordering
+    let orderByClause;
     if (sortBy === 'title') {
-      query = query.orderBy(sortDirection === 'asc' ? asc(products.title) : desc(products.title));
+      orderByClause = sortDirection === 'asc' ? asc(products.title) : desc(products.title);
     } else if (sortBy === 'price') {
-      query = query.orderBy(sortDirection === 'asc' ? asc(products.price) : desc(products.price));
-    } else if (sortBy === 'vendor') {
-      query = query.orderBy(sortDirection === 'asc' ? asc(products.vendor) : desc(products.vendor));
+      orderByClause = sortDirection === 'asc' ? asc(products.price) : desc(products.price);
+    } else {
+      orderByClause = sortDirection === 'asc' ? asc(products.vendor) : desc(products.vendor);
     }
 
-    query = query.limit(limit).offset(offset);
+    // Build the complete query
+    const query = db.select().from(products)
+      .where(and(...conditions))
+      .orderBy(orderByClause)
+      .limit(limit)
+      .offset(offset);
+    
+    const countQuery = db.select({ count: sql<number>`count(*)` })
+      .from(products)
+      .where(and(...conditions));
 
     const [data, [{ count: total }]] = await Promise.all([
       query,
@@ -735,17 +755,21 @@ export class DatabaseStorage implements IStorage {
       conditions.push(lte(vendorAnalytics.date, endDate));
     }
     
-    let query = db.select().from(vendorAnalytics).where(and(...conditions));
-    let countQuery = db.select({ count: sql<number>`count(*)` }).from(vendorAnalytics).where(and(...conditions));
+    // Determine ordering
+    const orderByClause = sortBy === 'date' 
+      ? (sortDirection === 'asc' ? asc(vendorAnalytics.date) : desc(vendorAnalytics.date))
+      : (sortDirection === 'asc' ? asc(vendorAnalytics.revenue) : desc(vendorAnalytics.revenue));
+
+    // Build the complete query
+    const query = db.select().from(vendorAnalytics)
+      .where(and(...conditions))
+      .orderBy(orderByClause)
+      .limit(limit)
+      .offset(offset);
     
-    // Apply sorting
-    if (sortBy === 'date') {
-      query = query.orderBy(sortDirection === 'asc' ? asc(vendorAnalytics.date) : desc(vendorAnalytics.date));
-    } else if (sortBy === 'revenue') {
-      query = query.orderBy(sortDirection === 'asc' ? asc(vendorAnalytics.revenue) : desc(vendorAnalytics.revenue));
-    }
-    
-    query = query.limit(limit).offset(offset);
+    const countQuery = db.select({ count: sql<number>`count(*)` })
+      .from(vendorAnalytics)
+      .where(and(...conditions));
     
     const [data, [{ count: total }]] = await Promise.all([
       query,
