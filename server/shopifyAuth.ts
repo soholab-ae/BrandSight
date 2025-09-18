@@ -1,10 +1,96 @@
 import { shopifyApp } from "@shopify/shopify-app-express";
 import { MemorySessionStorage } from "@shopify/shopify-app-session-storage-memory";
+import type { SessionStorage } from "@shopify/shopify-app-session-storage";
 import { ApiVersion } from "@shopify/shopify-api";
 import express, { type Express } from "express";
 import crypto from "crypto";
 import { storage } from "./storage";
 import { TokenEncryption } from "./services/tokenEncryption";
+import { db } from "./db";
+import { sessions } from "@shared/schema";
+import { eq, sql } from "drizzle-orm";
+
+// Custom PostgreSQL Session Storage for Shopify
+class PostgreSQLSessionStorage implements SessionStorage {
+  async storeSession(session: any): Promise<boolean> {
+    try {
+      const sessionData = {
+        sid: session.id,
+        sess: session,
+        expire: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+      };
+      
+      await db.insert(sessions).values(sessionData).onConflictDoUpdate({
+        target: sessions.sid,
+        set: {
+          sess: sessionData.sess,
+          expire: sessionData.expire
+        }
+      });
+      
+      return true;
+    } catch (error) {
+      console.error('Failed to store session:', TokenEncryption.sanitizeForLogging(error));
+      return false;
+    }
+  }
+
+  async loadSession(id: string): Promise<any | undefined> {
+    try {
+      const result = await db.select().from(sessions).where(eq(sessions.sid, id)).limit(1);
+      if (result.length === 0) {
+        return undefined;
+      }
+      
+      const sessionRecord = result[0];
+      if (new Date() > sessionRecord.expire) {
+        // Session expired, delete it
+        await this.deleteSession(id);
+        return undefined;
+      }
+      
+      return sessionRecord.sess as any;
+    } catch (error) {
+      console.error('Failed to load session:', TokenEncryption.sanitizeForLogging(error));
+      return undefined;
+    }
+  }
+
+  async deleteSession(id: string): Promise<boolean> {
+    try {
+      await db.delete(sessions).where(eq(sessions.sid, id));
+      return true;
+    } catch (error) {
+      console.error('Failed to delete session:', TokenEncryption.sanitizeForLogging(error));
+      return false;
+    }
+  }
+
+  async deleteSessions(ids: string[]): Promise<boolean> {
+    try {
+      for (const id of ids) {
+        await this.deleteSession(id);
+      }
+      return true;
+    } catch (error) {
+      console.error('Failed to delete sessions:', TokenEncryption.sanitizeForLogging(error));
+      return false;
+    }
+  }
+
+  async findSessionsByShop(shop: string): Promise<any[]> {
+    try {
+      const allSessions = await db.select().from(sessions);
+      return allSessions
+        .map(record => record.sess as any)
+        .filter(session => session && session.shop === shop)
+        .filter(session => new Date() <= new Date(session.expires || Date.now() + 7 * 24 * 60 * 60 * 1000));
+    } catch (error) {
+      console.error('Failed to find sessions by shop:', TokenEncryption.sanitizeForLogging(error));
+      return [];
+    }
+  }
+}
 
 // Conditionally initialize Shopify App Configuration
 let shopify: any = null;
@@ -28,7 +114,7 @@ function initializeShopify() {
       webhooks: {
         path: "/api/webhooks",
       },
-      sessionStorage: new MemorySessionStorage(),
+      sessionStorage: new PostgreSQLSessionStorage(),
       useOnlineTokens: true,
     });
   }
