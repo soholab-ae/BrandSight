@@ -132,12 +132,18 @@ function ensureStaticDir() {
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
+  
+  // Force production mode if we have built assets (published environment)
+  const isProduction = app.get("env") === "production" || 
+                       (app.get("env") === "development" && fs.existsSync(path.resolve(import.meta.dirname, '..', 'dist', 'public')));
+  
+  if (!isProduction) {
     await setupVite(app, server);
   } else {
     // Ensure static directory exists before serving
     ensureStaticDir();
     serveStatic(app);
+    log("Serving in production mode with static files");
   }
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
