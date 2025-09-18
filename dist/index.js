@@ -4298,7 +4298,6 @@ function serveStatic(app2) {
 }
 
 // server/index.ts
-import { execSync } from "child_process";
 import fs2 from "fs";
 import path3 from "path";
 var app = express3();
@@ -4353,19 +4352,21 @@ app.use((req, res, next) => {
 app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok", timestamp: (/* @__PURE__ */ new Date()).toISOString() });
 });
-app.get("/__diag/static", (_req, res) => {
-  const publicPath = path3.resolve(import.meta.dirname, "public");
-  const assetsPath = path3.resolve(publicPath, "assets");
-  res.json({
-    staticPath: publicPath,
-    assetsPath,
-    publicExists: fs2.existsSync(publicPath),
-    assetsExists: fs2.existsSync(assetsPath),
-    assetCount: fs2.existsSync(assetsPath) ? fs2.readdirSync(assetsPath).length : 0,
-    environment: app.get("env"),
-    sampleAssets: fs2.existsSync(assetsPath) ? fs2.readdirSync(assetsPath).slice(0, 3) : []
+if (app.get("env") === "development") {
+  app.get("/__diag/static", (_req, res) => {
+    const publicPath = path3.resolve(import.meta.dirname, "public");
+    const assetsPath = path3.resolve(publicPath, "assets");
+    res.json({
+      staticPath: publicPath,
+      assetsPath,
+      publicExists: fs2.existsSync(publicPath),
+      assetsExists: fs2.existsSync(assetsPath),
+      assetCount: fs2.existsSync(assetsPath) ? fs2.readdirSync(assetsPath).length : 0,
+      environment: app.get("env"),
+      sampleAssets: fs2.existsSync(assetsPath) ? fs2.readdirSync(assetsPath).slice(0, 3) : []
+    });
   });
-});
+}
 if (app.get("env") === "development") {
   app.get("/", (_req, res) => {
     res.status(200).json({ status: "ok", message: "Server is running in development" });
@@ -4393,17 +4394,7 @@ function ensureStaticDir() {
       log(`Failed to create symlink: ${error}`);
     }
   }
-  log(`Built assets not found at ${distAssetsPath}, attempting to build...`);
-  try {
-    execSync("npm run build", { cwd: path3.resolve(import.meta.dirname, ".."), stdio: "inherit" });
-    log("Successfully built client assets");
-    if (fs2.existsSync(distPublicPath)) {
-      fs2.symlinkSync(distPublicPath, expectedPath, "junction");
-      log(`Created symlink after build: ${expectedPath} -> ${distPublicPath}`);
-    }
-  } catch (error) {
-    log(`Failed to build assets: ${error}`);
-  }
+  log(`Warning: Built assets not found at ${distAssetsPath}. Ensure 'npm run build' was run during deployment.`);
 }
 (async () => {
   const server = await registerRoutes(app);
