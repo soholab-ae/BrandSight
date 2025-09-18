@@ -26,8 +26,8 @@ DATABASE_URL=your_neon_database_url
 SESSION_SECRET=your_secure_session_secret
 
 # Shopify Integration (Required for deployment)
-SHOPIFY_API_KEY=c7757dd8317e938754cef77d03490eb2
-SHOPIFY_API_SECRET=1a4bb0b07180bfc4d0145688343ca524
+SHOPIFY_API_KEY=your_shopify_api_key_here
+SHOPIFY_API_SECRET=your_shopify_api_secret_here
 SCOPES=read_products,read_orders,read_customers
 HOST=https://brandsight.replit.app
 
