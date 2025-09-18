@@ -708,13 +708,14 @@ export async function setupShopifyAuth(app: Express) {
   
   // Protected routes middleware - but exclude auth routes
   app.use((req, res, next) => {
-    // Skip validation for auth routes, login, manual setup, and user endpoint
+    // Skip validation for auth routes, login, manual setup, billing, and user endpoint
     if (req.path === '/api/auth' || 
         req.path === '/api/auth/callback' || 
         req.path === '/api/auth/user' ||  // Always skip for /api/auth/user - let route handler manage it
         req.path === '/api/login' ||
         req.path === '/api/webhooks' ||
         req.path === '/api/stores/manual-setup' ||
+        req.path === '/api/billing/status' || // Allow billing status for demo mode
         req.path.startsWith('/legal/')) {
       return next();
     }
