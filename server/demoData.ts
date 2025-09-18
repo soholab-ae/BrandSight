@@ -415,5 +415,5 @@ export const demoVendorAnalytics = generateVendorAnalytics();
 
 // Helper to check if we're in demo mode
 export function isDemoMode(userId?: string): boolean {
-  return !userId || userId === 'demo_user' || userId.startsWith('demo_') || userId.startsWith('shopify_');
+  return !userId || userId === 'demo_user' || userId.startsWith('demo_');
 }

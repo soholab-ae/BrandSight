@@ -181,6 +181,7 @@ export class DatabaseStorage implements IStorage {
     if (isDemoMode(userId)) {
       return [demoStore];
     }
+    
     const stores = await db.select().from(stores).where(eq(stores.userId, userId));
     return this.processStoresForOutput(stores);
   }
