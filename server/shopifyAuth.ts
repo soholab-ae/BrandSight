@@ -35,7 +35,7 @@ function initializeShopify() {
   return shopify;
 }
 
-export { shopify };
+export { shopify, initializeShopify, upsertShopifyUser };
 
 // Environment variables validation
 function validateShopifyConfig() {
@@ -606,16 +606,26 @@ export async function setupShopifyAuth(app: Express) {
     // Custom redirect to ensure proper embedded app loading
     async (req, res) => {
       const session = res.locals.shopify?.session;
-      if (session?.shop) {
+      console.log('[OAUTH CALLBACK] Session data:', session ? { shop: session.shop, hasAccessToken: !!session.accessToken } : 'No session');
+      
+      if (session?.shop && session?.accessToken) {
         const host = req.query.host as string;
         const shop = session.shop;
         
-        // Redirect to the embedded app dashboard with shop and host parameters
-        // This ensures the app loads properly in Shopify admin and skips the welcome page
-        const redirectUrl = `/dashboard?shop=${encodeURIComponent(shop)}${host ? `&host=${encodeURIComponent(host)}` : ''}`;
-        console.log(`Auth successful for ${shop}, redirecting to: ${redirectUrl}`);
-        res.redirect(redirectUrl);
+        console.log(`[OAUTH CALLBACK] Auth successful for ${shop}, host: ${host}`);
+        
+        // For embedded apps (from Shopify admin), redirect to dashboard with parameters
+        if (host || req.get('referer')?.includes('admin.shopify.com')) {
+          const redirectUrl = `/dashboard?shop=${encodeURIComponent(shop)}${host ? `&host=${encodeURIComponent(host)}` : ''}`;
+          console.log(`[OAUTH CALLBACK] Redirecting to embedded dashboard: ${redirectUrl}`);
+          res.redirect(redirectUrl);
+        } else {
+          // For standalone installs, redirect to dashboard without query parameters
+          console.log(`[OAUTH CALLBACK] Redirecting to standalone dashboard`);
+          res.redirect('/dashboard');
+        }
       } else {
+        console.error('[OAUTH CALLBACK] No valid session or shop found, redirecting to root');
         // Fallback to default redirect
         res.redirect('/');
       }
@@ -640,9 +650,10 @@ export async function setupShopifyAuth(app: Express) {
   
   // Protected routes middleware - but exclude auth routes
   app.use((req, res, next) => {
-    // Skip validation for auth routes, login, and manual setup
+    // Skip validation for auth routes, login, manual setup, and user endpoint
     if (req.path === '/api/auth' || 
         req.path === '/api/auth/callback' || 
+        req.path === '/api/auth/user' ||  // Always skip for /api/auth/user - let route handler manage it
         req.path === '/api/login' ||
         req.path === '/api/webhooks' ||
         req.path === '/api/stores/manual-setup' ||
@@ -650,18 +661,25 @@ export async function setupShopifyAuth(app: Express) {
       return next();
     }
     
-    // If we have a default shop domain configured, also skip validation for user and stores endpoints
+    // If we have a default shop domain configured, also skip validation for stores endpoints
     // This allows the app to work without OAuth for already-installed apps
     if (process.env.DEFAULT_SHOP_DOMAIN) {
-      if (req.path === '/api/auth/user' || 
-          req.path === '/api/stores' ||
+      if (req.path === '/api/stores' ||
           req.path.startsWith('/api/stores/')) {
         return next();
       }
     }
     
-    // Apply validation to other API routes
+    // Apply validation to other API routes only when we have proper shop context
     if (req.path.startsWith('/api/')) {
+      // Extract shop from multiple sources before validating
+      const shop = req.query.shop || req.headers['x-shopify-shop-domain'] || res.locals.shopify?.session?.shop;
+      
+      if (!shop) {
+        // No shop context - return 401 JSON instead of redirecting
+        return res.status(401).json({ message: "Unauthorized - Shop context required" });
+      }
+      
       return shopifyInstance.validateAuthenticatedSession()(req, res, next);
     }
     

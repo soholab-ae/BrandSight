@@ -404,13 +404,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
 </html>`);
   });
 
-  // Auth routes
+  // Auth routes - with proper Shopify session handling
   app.get('/api/auth/user', async (req: any, res, next) => {
+    console.log('[AUTH DEBUG] /api/auth/user called, useShopifyAuth:', useShopifyAuth);
+    console.log('[AUTH DEBUG] req.shopifyUser:', req.shopifyUser);
+    console.log('[AUTH DEBUG] req.user:', req.user);
+    console.log('[AUTH DEBUG] res.locals.shopify?.session:', !!res.locals.shopify?.session);
+    
+    // For Shopify auth, check session first
+    if (useShopifyAuth) {
+      try {
+        // Extract shop from multiple sources as specified
+        const shop = req.query.shop || req.headers['x-shopify-shop-domain'] || res.locals.shopify?.session?.shop;
+        
+        console.log('[AUTH DEBUG] Extracted shop from req.query.shop, headers, or session:', shop);
+        
+        // If shop is missing, return 401 JSON instead of calling validation
+        if (!shop) {
+          console.log('[AUTH DEBUG] No shop context found, returning 401 JSON');
+          return res.status(401).json({ message: "Unauthorized - Shop context required" });
+        }
+        
+        // Check if we're in a Shopify context (has shop parameter or embedded)
+        const isEmbeddedContext = req.get('referer')?.includes('admin.shopify.com') || 
+                                req.get('user-agent')?.includes('Shopify Mobile') ||
+                                req.headers['x-shopify-shop-domain'];
+        
+        console.log('[AUTH DEBUG] Shop:', shop, 'Embedded context:', isEmbeddedContext);
+        
+        // Only call validateAuthenticatedSession when we have a valid shop
+        // Import the initializeShopify function
+        const { initializeShopify } = await import("./shopifyAuth");
+        const shopifyInstance = initializeShopify();
+        
+        if (shopifyInstance && shopifyInstance.config) {
+          await new Promise((resolve, reject) => {
+            shopifyInstance.validateAuthenticatedSession()(req, res, (error: any) => {
+              if (error) {
+                console.log('[AUTH DEBUG] Shopify session validation failed:', error.message);
+                reject(error);
+              } else {
+                console.log('[AUTH DEBUG] Shopify session validation passed');
+                resolve(true);
+              }
+            });
+          });
+        }
+        
+        // If we have a valid Shopify session, extract user info
+        const session = res.locals.shopify?.session;
+        if (session && session.accessToken) {
+          console.log('[AUTH DEBUG] Valid Shopify session found for shop:', session.shop);
+          
+          // Upsert user from Shopify session
+          const { upsertShopifyUser } = await import("./shopifyAuth");
+          await upsertShopifyUser(session);
+          
+          // Get user ID based on session
+          const userId = session.onlineAccessInfo?.associated_user?.id 
+            ? `shopify_${session.onlineAccessInfo.associated_user.id}`
+            : `shopify_shop_${session.shop.replace('.myshopify.com', '')}`;
+            
+          console.log('[AUTH DEBUG] Using userId:', userId);
+          
+          const user = await storage.getUser(userId);
+          if (user) {
+            console.log('[AUTH DEBUG] User found, returning user data');
+            return res.json(user);
+          } else {
+            console.log('[AUTH DEBUG] User not found in database');
+            return res.status(404).json({ message: "User not found" });
+          }
+        } else {
+          // No valid session found, return 401 JSON instead of redirecting
+          console.log('[AUTH DEBUG] No valid Shopify session found, returning 401');
+          return res.status(401).json({ message: "Unauthorized - No valid Shopify session" });
+        }
+      } catch (error: any) {
+        console.log('[AUTH DEBUG] Shopify auth failed:', error?.message || error);
+        // Return 401 JSON instead of falling through to cause redirects
+        return res.status(401).json({ message: "Unauthorized - Shopify authentication failed" });
+      }
+    }
+    
     // If we have a default shop domain, create/return a default user
     if (process.env.DEFAULT_SHOP_DOMAIN && !req.user && !req.shopifyUser) {
       try {
         const shopDomain = process.env.DEFAULT_SHOP_DOMAIN;
         const userId = `shopify_${shopDomain.replace('.myshopify.com', '')}`;
+        
+        console.log('[AUTH DEBUG] Using default shop domain:', shopDomain, 'userId:', userId);
         
         // Create or get the default user
         const user = await storage.upsertUser({
@@ -431,6 +514,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     authenticate(req, res, async () => {
       try {
         const userId = getUserId(req);
+        console.log('[AUTH DEBUG] Fallback authentication, userId:', userId);
+        
         if (!userId) {
           return res.status(401).json({ message: "No user ID found" });
         }
