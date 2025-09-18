@@ -87,9 +87,23 @@ if (app.get('env') === 'development') {
   });
 }
 
-// Ensure static directory exists for production
+// Ensure static directory and assets exist for production
 function ensureStaticDir() {
   const expectedPath = path.resolve(import.meta.dirname, 'public');
+  const distAssetsPath = path.resolve(import.meta.dirname, '..', 'dist', 'public', 'assets');
+  
+  // Check if we have built assets
+  if (!fs.existsSync(distAssetsPath)) {
+    log(`Assets not found at ${distAssetsPath}, attempting to build...`);
+    try {
+      // Try to build the client
+      const { execSync } = require('child_process');
+      execSync('npm run build', { cwd: path.resolve(import.meta.dirname, '..'), stdio: 'inherit' });
+      log('Successfully built client assets');
+    } catch (error) {
+      log(`Failed to build assets: ${error}`);
+    }
+  }
   
   if (fs.existsSync(expectedPath)) {
     return; // Already exists, nothing to do
