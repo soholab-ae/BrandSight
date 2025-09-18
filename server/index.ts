@@ -86,15 +86,25 @@ if (app.get('env') === 'development') {
   app.get('/__diag/static', (_req, res) => {
     const publicPath = path.resolve(import.meta.dirname, 'public');
     const assetsPath = path.resolve(publicPath, 'assets');
+    const distPublicPath = path.resolve(import.meta.dirname, '..', 'dist', 'public');
+    const distAssetsPath = path.resolve(distPublicPath, 'assets');
     
     res.json({
-      staticPath: publicPath,
-      assetsPath: assetsPath,
-      publicExists: fs.existsSync(publicPath),
-      assetsExists: fs.existsSync(assetsPath),
-      assetCount: fs.existsSync(assetsPath) ? fs.readdirSync(assetsPath).length : 0,
-      environment: app.get('env'),
-      sampleAssets: fs.existsSync(assetsPath) ? fs.readdirSync(assetsPath).slice(0, 3) : []
+      serverPublic: {
+        path: publicPath,
+        exists: fs.existsSync(publicPath),
+        assetsExists: fs.existsSync(assetsPath),
+        assetCount: fs.existsSync(assetsPath) ? fs.readdirSync(assetsPath).length : 0,
+        sampleAssets: fs.existsSync(assetsPath) ? fs.readdirSync(assetsPath).slice(0, 3) : []
+      },
+      distPublic: {
+        path: distPublicPath,
+        exists: fs.existsSync(distPublicPath),
+        assetsExists: fs.existsSync(distAssetsPath),
+        assetCount: fs.existsSync(distAssetsPath) ? fs.readdirSync(distAssetsPath).length : 0,
+        sampleAssets: fs.existsSync(distAssetsPath) ? fs.readdirSync(distAssetsPath).slice(0, 3) : []
+      },
+      environment: app.get('env')
     });
   });
 }
@@ -106,110 +116,6 @@ if (app.get('env') === 'development') {
   });
 }
 
-// Ensure static directory and assets exist for production
-function ensureStaticDir() {
-  const expectedPath = path.resolve(import.meta.dirname, 'public');
-  const distPublicPath = path.resolve(import.meta.dirname, '..', 'dist', 'public');
-  const distAssetsPath = path.resolve(distPublicPath, 'assets');
-  const distPath = path.resolve(import.meta.dirname, '..', 'dist');
-  
-  log(`Checking build directories: dist=${fs.existsSync(distPath)}, dist/public=${fs.existsSync(distPublicPath)}, assets=${fs.existsSync(distAssetsPath)}`);
-  
-  // Deployment fallback: Create missing directories if they don't exist
-  if (!fs.existsSync(distPath)) {
-    try {
-      fs.mkdirSync(distPath, { recursive: true });
-      log(`Created missing dist directory: ${distPath}`);
-    } catch (error) {
-      log(`Failed to create dist directory: ${error}`);
-    }
-  }
-  
-  if (!fs.existsSync(distPublicPath)) {
-    try {
-      fs.mkdirSync(distPublicPath, { recursive: true });
-      log(`Created missing dist/public directory: ${distPublicPath}`);
-    } catch (error) {
-      log(`Failed to create dist/public directory: ${error}`);
-    }
-  }
-  
-  if (!fs.existsSync(distAssetsPath)) {
-    try {
-      fs.mkdirSync(distAssetsPath, { recursive: true });
-      log(`Created missing assets directory: ${distAssetsPath}`);
-    } catch (error) {
-      log(`Failed to create assets directory: ${error}`);
-    }
-  }
-  
-  // Always prefer dist/public if it exists with assets
-  if (fs.existsSync(distAssetsPath)) {
-    const assetFiles = fs.readdirSync(distAssetsPath);
-    if (assetFiles.length > 0) {
-      // Remove existing symlink/directory if it exists
-      if (fs.existsSync(expectedPath)) {
-        try {
-          fs.rmSync(expectedPath, { recursive: true, force: true });
-          log(`Removed existing server/public to use fresh dist/public`);
-        } catch (error) {
-          log(`Warning: Could not remove existing server/public: ${error}`);
-        }
-      }
-      
-      try {
-        // Create fresh symlink to dist/public
-        fs.symlinkSync(distPublicPath, expectedPath, 'junction');
-        log(`Created symlink: ${expectedPath} -> ${distPublicPath}`);
-        log(`Assets directory contains: ${assetFiles.length} files`);
-        return;
-      } catch (error) {
-        log(`Failed to create symlink: ${error}`);
-        
-        // Fallback: Try copying files instead of symlinking
-        try {
-          if (fs.existsSync(expectedPath)) {
-            fs.rmSync(expectedPath, { recursive: true, force: true });
-          }
-          copyDirectory(distPublicPath, expectedPath);
-          log(`Fallback: Copied dist/public to server/public`);
-          return;
-        } catch (copyError) {
-          log(`Fallback copy also failed: ${copyError}`);
-        }
-      }
-    } else {
-      log(`Warning: Assets directory exists but is empty: ${distAssetsPath}`);
-    }
-  }
-  
-  // Assets not found - this should not happen in production but provide helpful diagnostics
-  log(`Error: Built assets not found. Diagnostics:`);
-  log(`  - dist exists: ${fs.existsSync(distPath)}`);
-  log(`  - dist/public exists: ${fs.existsSync(distPublicPath)}`);
-  log(`  - dist/public/assets exists: ${fs.existsSync(distAssetsPath)}`);
-  log(`  - Ensure 'npm run build' was run during deployment`);
-  log(`  - Consider running 'node build.js' for a more robust build process`);
-}
-
-// Helper function to copy directories recursively
-function copyDirectory(source: string, target: string) {
-  if (!fs.existsSync(target)) {
-    fs.mkdirSync(target, { recursive: true });
-  }
-  
-  const files = fs.readdirSync(source);
-  for (const file of files) {
-    const sourcePath = path.join(source, file);
-    const targetPath = path.join(target, file);
-    
-    if (fs.statSync(sourcePath).isDirectory()) {
-      copyDirectory(sourcePath, targetPath);
-    } else {
-      fs.copyFileSync(sourcePath, targetPath);
-    }
-  }
-}
 
 (async () => {
   const server = await registerRoutes(app);
@@ -233,8 +139,6 @@ function copyDirectory(source: string, target: string) {
   if (!isProduction) {
     await setupVite(app, server);
   } else {
-    // Ensure static directory exists before serving
-    ensureStaticDir();
     serveStatic(app);
     log("Serving in production mode with static files");
   }

@@ -16,6 +16,7 @@ if (process.env.DISABLE_PACKAGE_CACHE === 'true') {
 const distPath = './dist';
 const distPublicPath = './dist/public';
 const distAssetsPath = './dist/public/assets';
+const serverPublicPath = './server/public';
 
 console.log('📁 Ensuring build directories exist...');
 
@@ -40,6 +41,15 @@ try {
   execSync('vite build', { stdio: 'inherit', cwd: '.' });
   console.log('✅ Vite build completed');
 
+  // Copy built files from dist/public to server/public
+  console.log('📋 Copying built files to server/public...');
+  if (existsSync(serverPublicPath)) {
+    execSync(`rm -rf ${serverPublicPath}`, { stdio: 'inherit' });
+    console.log('🗑️  Removed existing server/public');
+  }
+  execSync(`cp -r ${distPublicPath} ${serverPublicPath}`, { stdio: 'inherit' });
+  console.log('✅ Files copied to server/public');
+
   // Run esbuild for server
   console.log('🔨 Building server...');
   execSync('esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist', { stdio: 'inherit', cwd: '.' });
@@ -51,6 +61,7 @@ try {
   const requiredPaths = [
     { path: distPath, name: 'dist directory' },
     { path: distPublicPath, name: 'dist/public directory' },
+    { path: serverPublicPath, name: 'server/public directory' },
     { path: './dist/index.js', name: 'server bundle (dist/index.js)' }
   ];
   
@@ -65,9 +76,10 @@ try {
     }
   }
   
-  // Check critical frontend files
+  // Check critical frontend files in both locations
   const criticalFiles = [
-    { path: `${distPublicPath}/index.html`, name: 'index.html' }
+    { path: `${distPublicPath}/index.html`, name: 'index.html (dist)' },
+    { path: `${serverPublicPath}/index.html`, name: 'index.html (server)' }
   ];
   
   for (const { path, name } of criticalFiles) {
@@ -79,16 +91,29 @@ try {
     }
   }
   
-  // Check if assets directory has content (indicates successful Vite build)
+  // Check if assets directory has content in both locations
+  const serverAssetsPath = `${serverPublicPath}/assets`;
   if (existsSync(distAssetsPath)) {
     const assetFiles = readdirSync(distAssetsPath).filter(f => f.endsWith('.js') || f.endsWith('.css'));
-    console.log(`  ✅ Assets directory contains ${assetFiles.length} JS/CSS files`);
+    console.log(`  ✅ Dist assets directory contains ${assetFiles.length} JS/CSS files`);
     if (assetFiles.length === 0) {
-      console.error('  ❌ No JS/CSS assets found - Vite build may have failed');
+      console.error('  ❌ No JS/CSS assets found in dist - Vite build may have failed');
       verificationFailed = true;
     }
   } else {
-    console.error('  ❌ Assets directory missing');
+    console.error('  ❌ Dist assets directory missing');
+    verificationFailed = true;
+  }
+  
+  if (existsSync(serverAssetsPath)) {
+    const serverAssetFiles = readdirSync(serverAssetsPath).filter(f => f.endsWith('.js') || f.endsWith('.css'));
+    console.log(`  ✅ Server assets directory contains ${serverAssetFiles.length} JS/CSS files`);
+    if (serverAssetFiles.length === 0) {
+      console.error('  ❌ No JS/CSS assets found in server - Copy may have failed');
+      verificationFailed = true;
+    }
+  } else {
+    console.error('  ❌ Server assets directory missing');
     verificationFailed = true;
   }
   
