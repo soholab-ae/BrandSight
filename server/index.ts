@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { execSync } from "child_process";
 import fs from "fs";
 import path from "path";
 
@@ -80,21 +81,23 @@ app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Diagnostic endpoint to verify static file serving
-app.get('/__diag/static', (_req, res) => {
-  const publicPath = path.resolve(import.meta.dirname, 'public');
-  const assetsPath = path.resolve(publicPath, 'assets');
-  
-  res.json({
-    staticPath: publicPath,
-    assetsPath: assetsPath,
-    publicExists: fs.existsSync(publicPath),
-    assetsExists: fs.existsSync(assetsPath),
-    assetCount: fs.existsSync(assetsPath) ? fs.readdirSync(assetsPath).length : 0,
-    environment: app.get('env'),
-    sampleAssets: fs.existsSync(assetsPath) ? fs.readdirSync(assetsPath).slice(0, 3) : []
+// Diagnostic endpoint to verify static file serving (development only)
+if (app.get('env') === 'development') {
+  app.get('/__diag/static', (_req, res) => {
+    const publicPath = path.resolve(import.meta.dirname, 'public');
+    const assetsPath = path.resolve(publicPath, 'assets');
+    
+    res.json({
+      staticPath: publicPath,
+      assetsPath: assetsPath,
+      publicExists: fs.existsSync(publicPath),
+      assetsExists: fs.existsSync(assetsPath),
+      assetCount: fs.existsSync(assetsPath) ? fs.readdirSync(assetsPath).length : 0,
+      environment: app.get('env'),
+      sampleAssets: fs.existsSync(assetsPath) ? fs.readdirSync(assetsPath).slice(0, 3) : []
+    });
   });
-});
+}
 
 // Only add root health check in development to avoid intercepting SPA in production
 if (app.get('env') === 'development') {
@@ -132,21 +135,8 @@ function ensureStaticDir() {
     }
   }
   
-  // Fallback: Check if we need to build assets
-  log(`Built assets not found at ${distAssetsPath}, attempting to build...`);
-  try {
-    const { execSync } = require('child_process');
-    execSync('npm run build', { cwd: path.resolve(import.meta.dirname, '..'), stdio: 'inherit' });
-    log('Successfully built client assets');
-    
-    // Retry symlink after build
-    if (fs.existsSync(distPublicPath)) {
-      fs.symlinkSync(distPublicPath, expectedPath, 'junction');
-      log(`Created symlink after build: ${expectedPath} -> ${distPublicPath}`);
-    }
-  } catch (error) {
-    log(`Failed to build assets: ${error}`);
-  }
+  // Assets not found - this should not happen in production
+  log(`Warning: Built assets not found at ${distAssetsPath}. Ensure 'npm run build' was run during deployment.`);
 }
 
 (async () => {

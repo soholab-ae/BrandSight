@@ -1,11 +1,5 @@
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
-var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
-  get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
-}) : x)(function(x) {
-  if (typeof require !== "undefined") return require.apply(this, arguments);
-  throw Error('Dynamic require of "' + x + '" is not supported');
-});
 var __esm = (fn, res) => function __init() {
   return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
 };
@@ -4304,6 +4298,7 @@ function serveStatic(app2) {
 }
 
 // server/index.ts
+import { execSync } from "child_process";
 import fs2 from "fs";
 import path3 from "path";
 var app = express3();
@@ -4358,6 +4353,19 @@ app.use((req, res, next) => {
 app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok", timestamp: (/* @__PURE__ */ new Date()).toISOString() });
 });
+app.get("/__diag/static", (_req, res) => {
+  const publicPath = path3.resolve(import.meta.dirname, "public");
+  const assetsPath = path3.resolve(publicPath, "assets");
+  res.json({
+    staticPath: publicPath,
+    assetsPath,
+    publicExists: fs2.existsSync(publicPath),
+    assetsExists: fs2.existsSync(assetsPath),
+    assetCount: fs2.existsSync(assetsPath) ? fs2.readdirSync(assetsPath).length : 0,
+    environment: app.get("env"),
+    sampleAssets: fs2.existsSync(assetsPath) ? fs2.readdirSync(assetsPath).slice(0, 3) : []
+  });
+});
 if (app.get("env") === "development") {
   app.get("/", (_req, res) => {
     res.status(200).json({ status: "ok", message: "Server is running in development" });
@@ -4365,36 +4373,36 @@ if (app.get("env") === "development") {
 }
 function ensureStaticDir() {
   const expectedPath = path3.resolve(import.meta.dirname, "public");
-  const distAssetsPath = path3.resolve(import.meta.dirname, "..", "dist", "public", "assets");
-  if (!fs2.existsSync(distAssetsPath)) {
-    log(`Assets not found at ${distAssetsPath}, attempting to build...`);
-    try {
-      const { execSync } = __require("child_process");
-      execSync("npm run build", { cwd: path3.resolve(import.meta.dirname, ".."), stdio: "inherit" });
-      log("Successfully built client assets");
-    } catch (error) {
-      log(`Failed to build assets: ${error}`);
-    }
-  }
-  if (fs2.existsSync(expectedPath)) {
-    return;
-  }
-  const candidates = [
-    path3.resolve(import.meta.dirname, "dist", "public"),
-    path3.resolve(import.meta.dirname, "..", "client", "dist"),
-    path3.resolve(import.meta.dirname, "..", "dist", "public")
-  ];
-  for (const candidate of candidates) {
-    if (fs2.existsSync(candidate)) {
+  const distPublicPath = path3.resolve(import.meta.dirname, "..", "dist", "public");
+  const distAssetsPath = path3.resolve(distPublicPath, "assets");
+  if (fs2.existsSync(distAssetsPath)) {
+    if (fs2.existsSync(expectedPath)) {
       try {
-        fs2.symlinkSync(candidate, expectedPath, "junction");
-        log(`Created symlink: ${expectedPath} -> ${candidate}`);
-        return;
+        fs2.rmSync(expectedPath, { recursive: true, force: true });
+        log(`Removed existing server/public to use fresh dist/public`);
       } catch (error) {
-        log(`Failed to create symlink: ${error}`);
-        break;
+        log(`Warning: Could not remove existing server/public: ${error}`);
       }
     }
+    try {
+      fs2.symlinkSync(distPublicPath, expectedPath, "junction");
+      log(`Created symlink: ${expectedPath} -> ${distPublicPath}`);
+      log(`Assets directory contains: ${fs2.readdirSync(distAssetsPath).length} files`);
+      return;
+    } catch (error) {
+      log(`Failed to create symlink: ${error}`);
+    }
+  }
+  log(`Built assets not found at ${distAssetsPath}, attempting to build...`);
+  try {
+    execSync("npm run build", { cwd: path3.resolve(import.meta.dirname, ".."), stdio: "inherit" });
+    log("Successfully built client assets");
+    if (fs2.existsSync(distPublicPath)) {
+      fs2.symlinkSync(distPublicPath, expectedPath, "junction");
+      log(`Created symlink after build: ${expectedPath} -> ${distPublicPath}`);
+    }
+  } catch (error) {
+    log(`Failed to build assets: ${error}`);
   }
 }
 (async () => {
