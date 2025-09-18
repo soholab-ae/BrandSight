@@ -406,19 +406,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Auth routes - simplified according to architect's plan
   app.get('/api/auth/user', async (req: any, res, next) => {
-    console.log('[AUTH DEBUG] /api/auth/user called, useShopifyAuth:', useShopifyAuth);
+    console.log('[AUTH DEBUG] ==> /api/auth/user endpoint called');
+    console.log('[AUTH DEBUG] useShopifyAuth:', useShopifyAuth);
+    console.log('[AUTH DEBUG] Request query params:', req.query);
+    console.log('[AUTH DEBUG] Request referrer:', req.get('referer'));
+    console.log('[AUTH DEBUG] Request headers (Shopify):', Object.keys(req.headers).filter(h => h.includes('shopify')));
+    console.log('[AUTH DEBUG] Session exists:', !!res.locals.shopify?.session);
+    console.log('[AUTH DEBUG] Session shop:', res.locals.shopify?.session?.shop);
     
     if (useShopifyAuth) {
       try {
-        // Extract shop from multiple sources
-        const shop = req.query.shop || req.headers['x-shopify-shop-domain'] || res.locals.shopify?.session?.shop;
-        const host = req.query.host || req.headers['x-shopify-host'];
+        // Enhanced parameter extraction for embedded contexts
+        let shop = req.query.shop || req.headers['x-shopify-shop-domain'] || res.locals.shopify?.session?.shop;
+        let host = req.query.host || req.headers['x-shopify-host'];
         
-        console.log('[AUTH DEBUG] Shop:', shop, 'Host:', host);
+        // For embedded apps, also check additional sources
+        const referer = req.get('referer') || '';
+        const isFromShopifyAdmin = referer.includes('admin.shopify.com');
         
-        if (!shop) {
-          // Enable demo mode when no shop context is provided
-          console.log('[AUTH DEBUG] No shop context, enabling demo mode');
+        // Extract shop from referer if coming from Shopify admin and no shop found
+        if (!shop && isFromShopifyAdmin) {
+          const refererUrl = new URL(referer);
+          // Extract shop from admin.shopify.com/store/{shop}/... pattern
+          const pathParts = refererUrl.pathname.split('/');
+          const storeIndex = pathParts.indexOf('store');
+          if (storeIndex !== -1 && pathParts[storeIndex + 1]) {
+            shop = `${pathParts[storeIndex + 1]}.myshopify.com`;
+            console.log('[AUTH DEBUG] Extracted shop from referer:', shop);
+          }
+        }
+        
+        // Check for embedded context indicators
+        const isEmbeddedContext = isFromShopifyAdmin || 
+                                  req.query.embedded === '1' ||
+                                  req.headers['x-shopify-embedded'] === '1' ||
+                                  req.get('user-agent')?.includes('Shopify');
+        
+        console.log('[AUTH DEBUG] Shop:', shop, 'Host:', host, 'Embedded context:', isEmbeddedContext);
+        
+        if (!shop && !isEmbeddedContext) {
+          // Only enable demo mode when clearly not in embedded context
+          console.log('[AUTH DEBUG] No shop context and not embedded, enabling demo mode');
           const demoUser = {
             id: "demo_user",
             email: "demo@example.com", 
@@ -427,6 +455,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
             profileImageUrl: null
           };
           return res.json(demoUser);
+        }
+        
+        if (!shop && isEmbeddedContext) {
+          // We're in embedded context but no shop found - return proper App Bridge response
+          console.log('[AUTH DEBUG] ==> Embedded context detected but no shop parameter found');
+          console.log('[AUTH DEBUG] Referer:', referer);
+          console.log('[AUTH DEBUG] User-Agent:', req.get('user-agent'));
+          console.log('[AUTH DEBUG] All headers:', Object.keys(req.headers).join(', '));
+          
+          const loginUrl = `/api/login?embedded=1${host ? `&host=${encodeURIComponent(host)}` : ''}`;
+          console.log('[AUTH DEBUG] Returning 401 for embedded app with loginUrl:', loginUrl);
+          
+          return res.status(401).json({ 
+            message: "Shop parameter required for embedded app",
+            loginUrl,
+            requiresReload: true,
+            isEmbedded: true,
+            debug: {
+              referer,
+              userAgent: req.get('user-agent'),
+              isFromShopifyAdmin,
+              headers: Object.keys(req.headers).filter(h => h.includes('shopify'))
+            }
+          });
         }
         
         // Try to validate authenticated session first
@@ -504,13 +556,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log('[AUTH DEBUG] Error checking store:', error);
         }
         
-        // Neither session is valid nor store exists/active - return 401 with login URL
+        // Neither session is valid nor store exists/active - return 401 with proper App Bridge response
         const loginUrl = `/api/login?${new URLSearchParams({ 
           shop, 
           ...(host && { host }) 
         }).toString()}`;
-        console.log('[AUTH DEBUG] No valid session or active store, returning 401 with loginUrl:', loginUrl);
-        return res.status(401).json({ loginUrl });
+        
+        console.log('[AUTH DEBUG] ==> No valid session or active store found');
+        console.log('[AUTH DEBUG] Shop:', shop, 'Host:', host);
+        console.log('[AUTH DEBUG] Embedded context:', isEmbeddedContext);
+        console.log('[AUTH DEBUG] Returning 401 with loginUrl:', loginUrl);
+        
+        return res.status(401).json({ 
+          message: isEmbeddedContext ? "Authentication required for embedded app" : "Authentication required",
+          loginUrl,
+          requiresReload: isEmbeddedContext,
+          isEmbedded: isEmbeddedContext,
+          debug: {
+            shop,
+            host,
+            referer,
+            isFromShopifyAdmin,
+            hasSession: !!res.locals.shopify?.session,
+            sessionShop: res.locals.shopify?.session?.shop
+          }
+        });
         
       } catch (error: any) {
         console.error('[AUTH DEBUG] Unexpected error in auth/user:', error);
