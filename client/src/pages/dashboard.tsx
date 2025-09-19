@@ -21,17 +21,17 @@ import {
 } from "@/components/LazyComponents";
 import LazyWrapper from "@/components/LazyWrapper";
 
-// Performance monitoring hooks
-import { usePerformanceMonitor, useMemoryStats, useDatasetOptimization } from "@/hooks/use-performance";
+// Performance monitoring hooks - DISABLED for performance fix
+// import { usePerformanceMonitor, useMemoryStats, useDatasetOptimization } from "@/hooks/use-performance";
 
 export default function Dashboard() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading } = useAuth();
   
-  // Performance monitoring
-  usePerformanceMonitor('Dashboard');
-  useMemoryStats();
-  const { clearCache, performCleanup } = useDatasetOptimization();
+  // Performance monitoring - DISABLED to fix 62+ second loading times
+  // usePerformanceMonitor('Dashboard');
+  // useMemoryStats();
+  // const { clearCache, performCleanup } = useDatasetOptimization();
   
   // Check if using demo data
   const { data: stores } = useQuery({
