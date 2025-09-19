@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { shopifyService } from "./services/shopifyService";
 import { insertStoreSchema } from "@shared/schema";
-import { createBillingSubscription, checkActiveSubscription, cancelSubscription, createPlanEnforcementMiddleware } from "./shopifyBilling";
+import { createBillingSubscription, checkActiveSubscription, cancelSubscription, createPlanEnforcementMiddleware, getPlanRestrictions } from "./shopifyBilling";
 import { cacheService, CacheKeyBuilder } from "./services/cacheService";
 import * as csv from 'fast-csv';
 import * as XLSX from 'xlsx';
@@ -16,7 +16,8 @@ async function streamVendorCSVExport(
   storeId: string,
   params: { sortBy: string; sortDirection: 'asc' | 'desc'; search?: string; vendorId?: string },
   res: Response,
-  dateRange?: string
+  dateRange?: string,
+  planRestrictions?: any
 ) {
   return new Promise(async (resolve, reject) => {
     try {
@@ -68,7 +69,7 @@ async function streamVendorCSVExport(
           sortDirection: params.sortDirection,
           search: params.search,
           vendorId: params.vendorId,
-          planRestrictions: req?.planRestrictions
+          planRestrictions: planRestrictions
         });
         
         // Write batch data to CSV
@@ -101,7 +102,8 @@ async function streamVendorExcelExport(
   storeId: string,
   params: { sortBy: string; sortDirection: 'asc' | 'desc'; search?: string; vendorId?: string },
   res: Response,
-  dateRange?: string
+  dateRange?: string,
+  planRestrictions?: any
 ) {
   try {
     // For Excel, we need to collect all data first, then generate the file
@@ -120,7 +122,7 @@ async function streamVendorExcelExport(
         sortDirection: params.sortDirection,
         search: params.search,
         vendorId: params.vendorId,
-        planRestrictions: req.planRestrictions
+        planRestrictions: planRestrictions
       });
       
       allVendors.push(...result.data);
@@ -833,7 +835,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.setHeader('Cache-Control', 'no-cache');
       
       // Stream CSV data
-      await streamVendorCSVExport(store.id, exportParams, res, dateRange as string);
+      await streamVendorCSVExport(store.id, exportParams, res, dateRange as string, req.planRestrictions);
     } catch (error) {
       console.error("Error exporting vendor CSV:", error);
       if (!res.headersSent) {
@@ -862,7 +864,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.setHeader('Cache-Control', 'no-cache');
       
       // Stream Excel data
-      await streamVendorExcelExport(store.id, exportParams, res, dateRange as string);
+      await streamVendorExcelExport(store.id, exportParams, res, dateRange as string, req.planRestrictions);
     } catch (error) {
       console.error("Error exporting vendor Excel:", error);
       if (!res.headersSent) {
