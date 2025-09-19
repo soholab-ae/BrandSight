@@ -2,7 +2,7 @@
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 
-app = "brandsight"
+app = "brandsight-fly"
 primary_region = "iad"
 
 [build]
@@ -67,4 +67,4 @@ primary_region = "iad"
 
 # Process configuration
 [processes]
-  app = "npm start"
+  app = "node dist/index.js"
