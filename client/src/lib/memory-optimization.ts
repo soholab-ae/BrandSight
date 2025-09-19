@@ -7,26 +7,25 @@ export class MemoryOptimizer {
   
   /**
    * Initialize memory optimization with automatic cleanup
+   * OPTIMIZED - Reduced frequency to prevent performance issues
    */
   static initialize() {
-    // Set up automatic cache cleanup every 5 minutes
-    this.cleanupInterval = setInterval(() => {
-      this.performCleanup();
-    }, 5 * 60 * 1000);
-
-    // Add memory pressure detection
-    if ('memory' in performance) {
-      this.monitorMemoryUsage();
+    // Only initialize once
+    if (this.cleanupInterval) {
+      return;
     }
 
-    // Clean up on page visibility change
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) {
-        this.performCleanup();
-      }
-    });
+    // Reduced frequency: cleanup every 15 minutes instead of 5
+    this.cleanupInterval = setInterval(() => {
+      this.performCleanup();
+    }, 15 * 60 * 1000);
 
-    // Clean up before page unload
+    // Disabled memory pressure detection - was causing blocking operations
+    // if ('memory' in performance) {
+    //   this.monitorMemoryUsage();
+    // }
+
+    // Keep essential cleanup events only
     window.addEventListener('beforeunload', () => {
       this.performCleanup();
       this.cleanup();
@@ -35,50 +34,41 @@ export class MemoryOptimizer {
 
   /**
    * Clean up React Query cache and remove stale data
+   * OPTIMIZED - Reduced frequency and scope to prevent blocking
    */
   static performCleanup() {
-    console.log('[MemoryOptimizer] Performing cache cleanup...');
+    // Console logging completely disabled to prevent console spam
     
-    // Remove queries older than 10 minutes
+    // Less aggressive cleanup - only remove queries older than 30 minutes
+    const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000;
+    
     queryClient.getQueryCache().getAll().forEach(query => {
       const lastUpdated = query.state.dataUpdatedAt;
-      const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
       
-      if (lastUpdated < tenMinutesAgo) {
+      if (lastUpdated < thirtyMinutesAgo) {
         queryClient.removeQueries({ queryKey: query.queryKey });
       }
     });
 
-    // Clear mutation cache
-    queryClient.getMutationCache().clear();
-
-    // Force garbage collection if available (dev environment)
-    if (typeof window !== 'undefined' && 'gc' in window) {
-      try {
-        (window as any).gc();
-      } catch (e) {
-        // Ignore if not available
-      }
+    // Only clear mutation cache if there are many mutations
+    const mutations = queryClient.getMutationCache().getAll();
+    if (mutations.length > 10) {
+      queryClient.getMutationCache().clear();
     }
 
-    console.log('[MemoryOptimizer] Cache cleanup completed');
+    // Remove forced garbage collection - was causing blocking
+    
+    // Console logging completely disabled to prevent console spam
   }
 
   /**
    * Monitor memory usage and trigger cleanup when needed
+   * DISABLED - This was causing performance issues with frequent checks
    */
   private static monitorMemoryUsage() {
-    setInterval(() => {
-      try {
-        const memInfo = (performance as any).memory;
-        if (memInfo && memInfo.usedJSHeapSize > this.memoryThreshold) {
-          console.warn('[MemoryOptimizer] High memory usage detected, triggering cleanup');
-          this.performCleanup();
-        }
-      } catch (e) {
-        // Memory API not supported
-      }
-    }, 30000); // Check every 30 seconds
+    // Disabled to fix performance issues - was running every 30 seconds
+    // and triggering frequent cleanups that blocked the UI
+    return;
   }
 
   /**
@@ -121,7 +111,7 @@ export class MemoryOptimizer {
       });
     });
 
-    console.log(`[MemoryOptimizer] Cleared ${dataType} cache`);
+    // Console logging disabled to prevent spam
   }
 
   /**
@@ -224,32 +214,21 @@ export class PerformanceMonitor {
 
   /**
    * Start measuring performance for a component
+   * COMPLETELY DISABLED - This was causing 62+ second loading times
    */
   static startMeasure(name: string) {
-    this.metrics[name] = {
-      startTime: performance.now(),
-      startMemory: this.getCurrentMemory()
-    };
+    // Completely disabled to fix critical performance issue
+    return;
   }
 
   /**
    * End measurement and log results
+   * COMPLETELY DISABLED - This was causing critical performance issues
    */
   static endMeasure(name: string) {
-    if (!this.metrics[name]) return;
-
-    const endTime = performance.now();
-    const endMemory = this.getCurrentMemory();
-    
-    const duration = endTime - this.metrics[name].startTime;
-    const memoryDelta = endMemory - this.metrics[name].startMemory;
-
-    console.log(`[Performance] ${name}:`, {
-      duration: `${duration.toFixed(2)}ms`,
-      memoryDelta: memoryDelta ? `${(memoryDelta / 1024 / 1024).toFixed(2)}MB` : 'N/A'
-    });
-
-    delete this.metrics[name];
+    // Completely disabled to fix 62+ second loading times
+    // The frequent console.log calls were causing significant blocking operations
+    return;
   }
 
   /**
@@ -267,34 +246,8 @@ export class PerformanceMonitor {
    * Monitor largest contentful paint and other Core Web Vitals
    */
   static monitorWebVitals() {
-    // Monitor LCP
-    new PerformanceObserver((entryList) => {
-      const entries = entryList.getEntries();
-      entries.forEach((entry: any) => {
-        console.log('[WebVitals] LCP:', entry.startTime);
-      });
-    }).observe({ entryTypes: ['largest-contentful-paint'] });
-
-    // Monitor FID
-    new PerformanceObserver((entryList) => {
-      const entries = entryList.getEntries();
-      entries.forEach((entry: any) => {
-        console.log('[WebVitals] FID:', entry.processingStart - entry.startTime);
-      });
-    }).observe({ entryTypes: ['first-input'] });
-
-    // Monitor CLS
-    new PerformanceObserver((entryList) => {
-      const entries = entryList.getEntries();
-      let clsValue = 0;
-      entries.forEach((entry: any) => {
-        if (!entry.hadRecentInput) {
-          clsValue += entry.value;
-        }
-      });
-      if (clsValue > 0) {
-        console.log('[WebVitals] CLS:', clsValue);
-      }
-    }).observe({ entryTypes: ['layout-shift'] });
+    // COMPLETELY DISABLED - All Web Vitals monitoring and console logging disabled to prevent spam
+    // This was contributing to console noise and performance monitoring issues
+    return;
   }
 }

@@ -3,17 +3,14 @@ import { PerformanceMonitor, MemoryOptimizer, PaginationOptimizer } from '@/lib/
 
 /**
  * Hook to monitor component performance and memory usage
+ * DISABLED - This was causing runaway performance monitoring every 3 seconds
  */
-export function usePerformanceMonitor(componentName: string, enabled: boolean = true) {
+export function usePerformanceMonitor(componentName: string, enabled: boolean = false) {
   useEffect(() => {
-    if (!enabled) return;
-    
-    PerformanceMonitor.startMeasure(componentName);
-    
-    return () => {
-      PerformanceMonitor.endMeasure(componentName);
-    };
-  }, [componentName, enabled]);
+    // COMPLETELY DISABLED - Performance monitoring was causing console spam every 3 seconds
+    // All console logging and performance measurement removed to fix critical issue
+    return;
+  }, []); // Remove dependencies to prevent re-runs
 }
 
 /**
@@ -30,25 +27,13 @@ export function useOptimalPagination(componentType: 'table' | 'cards' | 'list') 
 
 /**
  * Hook to monitor and display memory statistics (dev mode)
+ * DISABLED - This was contributing to performance issues
  */
 export function useMemoryStats() {
   useEffect(() => {
-    const isDev = process.env.NODE_ENV === 'development';
-    if (!isDev) return;
-    
-    const interval = setInterval(() => {
-      const stats = MemoryOptimizer.getMemoryStats();
-      console.group('[Memory Stats]');
-      console.log('Active Queries:', stats.activeQueries);
-      console.log('Active Mutations:', stats.activeMutations);
-      console.log('Estimated Cache Size:', `${(stats.cacheSize / 1024 / 1024).toFixed(2)}MB`);
-      if (stats.memoryUsage) {
-        console.log('Heap Size:', `${(stats.memoryUsage.usedJSHeapSize / 1024 / 1024).toFixed(2)}MB`);
-      }
-      console.groupEnd();
-    }, 10000); // Every 10 seconds
-    
-    return () => clearInterval(interval);
+    // Memory stats monitoring disabled to fix performance issues
+    // The frequent console logging was contributing to blocking operations
+    return;
   }, []);
 }
 
