@@ -11,10 +11,13 @@ var __export = (target, all) => {
 // shared/schema.ts
 var schema_exports = {};
 __export(schema_exports, {
+  PLAN_NAMES: () => PLAN_NAMES,
+  SUBSCRIPTION_STATUS: () => SUBSCRIPTION_STATUS,
   insertOrderLineItemSchema: () => insertOrderLineItemSchema,
   insertOrderSchema: () => insertOrderSchema,
   insertProductSchema: () => insertProductSchema,
   insertStoreSchema: () => insertStoreSchema,
+  insertSubscriptionSchema: () => insertSubscriptionSchema,
   insertVendorAnalyticsSchema: () => insertVendorAnalyticsSchema,
   insertVendorSchema: () => insertVendorSchema,
   orderLineItems: () => orderLineItems,
@@ -23,6 +26,7 @@ __export(schema_exports, {
   products: () => products,
   sessions: () => sessions,
   stores: () => stores,
+  subscriptions: () => subscriptions,
   users: () => users,
   vendorAnalytics: () => vendorAnalytics,
   vendors: () => vendors
@@ -39,7 +43,7 @@ import {
   boolean
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-var sessions, users, stores, vendors, products, orders, orderLineItems, vendorAnalytics, pageAnalytics, insertStoreSchema, insertVendorSchema, insertProductSchema, insertOrderSchema, insertOrderLineItemSchema, insertVendorAnalyticsSchema;
+var sessions, users, stores, vendors, products, orders, orderLineItems, subscriptions, vendorAnalytics, pageAnalytics, insertStoreSchema, insertVendorSchema, insertProductSchema, insertOrderSchema, insertOrderLineItemSchema, insertSubscriptionSchema, insertVendorAnalyticsSchema, PLAN_NAMES, SUBSCRIPTION_STATUS;
 var init_schema = __esm({
   "shared/schema.ts"() {
     "use strict";
@@ -137,6 +141,27 @@ var init_schema = __esm({
       index("IDX_order_line_items_vendor_id").on(table.vendorId),
       index("IDX_order_line_items_product_id").on(table.productId)
     ]);
+    subscriptions = pgTable("subscriptions", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      storeId: varchar("store_id").notNull().references(() => stores.id),
+      shopifySubscriptionId: varchar("shopify_subscription_id"),
+      planName: varchar("plan_name").notNull(),
+      // 'Starter', 'Growth', 'Scale'
+      status: varchar("status").notNull(),
+      // 'active', 'cancelled', 'expired', 'trial'
+      amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+      currency: varchar("currency").default("USD"),
+      trialEndsAt: timestamp("trial_ends_at"),
+      currentPeriodStart: timestamp("current_period_start"),
+      currentPeriodEnd: timestamp("current_period_end"),
+      cancelledAt: timestamp("cancelled_at"),
+      createdAt: timestamp("created_at").defaultNow(),
+      updatedAt: timestamp("updated_at").defaultNow()
+    }, (table) => [
+      index("IDX_subscriptions_store_id").on(table.storeId),
+      index("IDX_subscriptions_status").on(table.status),
+      index("IDX_subscriptions_shopify_id").on(table.shopifySubscriptionId)
+    ]);
     vendorAnalytics = pgTable("vendor_analytics", {
       id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
       storeId: varchar("store_id").notNull().references(() => stores.id),
@@ -186,10 +211,26 @@ var init_schema = __esm({
       createdAt: true
     });
     insertOrderLineItemSchema = createInsertSchema(orderLineItems);
+    insertSubscriptionSchema = createInsertSchema(subscriptions).omit({
+      id: true,
+      createdAt: true,
+      updatedAt: true
+    });
     insertVendorAnalyticsSchema = createInsertSchema(vendorAnalytics).omit({
       id: true,
       createdAt: true
     });
+    PLAN_NAMES = {
+      STARTER: "Starter",
+      GROWTH: "Growth",
+      SCALE: "Scale"
+    };
+    SUBSCRIPTION_STATUS = {
+      ACTIVE: "active",
+      CANCELLED: "cancelled",
+      EXPIRED: "expired",
+      TRIAL: "trial"
+    };
   }
 });
 
@@ -745,6 +786,11 @@ var init_tokenEncryption = __esm({
 });
 
 // server/storage.ts
+var storage_exports = {};
+__export(storage_exports, {
+  DatabaseStorage: () => DatabaseStorage,
+  storage: () => storage
+});
 import { eq, and, gte, lte, desc, sql as sql2, asc } from "drizzle-orm";
 var DatabaseStorage, storage;
 var init_storage = __esm({
@@ -924,25 +970,37 @@ var init_storage = __esm({
         };
       }
       async getStoreVendorMetrics(storeId, params) {
-        const { page = 1, limit = 50, sortBy = "revenue", sortDirection = "desc", search } = params;
+        const { page = 1, limit = 50, sortBy = "revenue", sortDirection = "desc", search, vendorId, planRestrictions } = params;
         const offset = (page - 1) * limit;
         if (storeId === "demo_store_1") {
-          const vendorMetrics = demoVendors.map((vendor) => ({
-            id: vendor.id,
-            name: vendor.name,
-            productCount: Math.floor(Math.random() * 100 + 10),
-            revenue: Math.floor(Math.random() * 1e5 + 1e4),
-            aov: Math.floor(Math.random() * 200 + 50),
-            conversion: Math.random() * 5 + 1,
-            visitors: Math.floor(Math.random() * 1e4 + 1e3),
-            growth: Math.random() * 50 - 10,
-            totalOrders: Math.floor(Math.random() * 500 + 50)
-          }));
+          const cutoffDate2 = planRestrictions?.dataHistoryDays ? new Date(Date.now() - planRestrictions.dataHistoryDays * 24 * 60 * 60 * 1e3) : new Date(Date.now() - 90 * 24 * 60 * 60 * 1e3);
+          const filteredAnalytics = demoVendorAnalytics.filter((a) => a.date >= cutoffDate2);
+          const vendorMetrics = demoVendors.map((vendor) => {
+            const vendorAnalytics2 = filteredAnalytics.filter((a) => a.vendorId === vendor.id);
+            const totalRevenue = vendorAnalytics2.reduce((sum, a) => sum + parseFloat(a.revenue || "0"), 0);
+            const totalOrders = vendorAnalytics2.reduce((sum, a) => sum + (a.orders || 0), 0);
+            const totalVisitors = vendorAnalytics2.reduce((sum, a) => sum + (a.visitors || 0), 0);
+            const totalConversions = vendorAnalytics2.reduce((sum, a) => sum + (a.conversions || 0), 0);
+            return {
+              id: vendor.id,
+              name: vendor.name,
+              productCount: Math.floor(Math.random() * 100 + 10),
+              revenue: totalRevenue > 0 ? totalRevenue : Math.floor(Math.random() * 1e5 + 1e4),
+              aov: totalOrders > 0 ? totalRevenue / totalOrders : Math.floor(Math.random() * 200 + 50),
+              conversion: totalVisitors > 0 ? totalConversions / totalVisitors * 100 : Math.random() * 5 + 1,
+              visitors: totalVisitors > 0 ? totalVisitors : Math.floor(Math.random() * 1e4 + 1e3),
+              growth: Math.random() * 50 - 10,
+              totalOrders: totalOrders > 0 ? totalOrders : Math.floor(Math.random() * 500 + 50)
+            };
+          });
           let filteredMetrics = [...vendorMetrics];
           if (search) {
             filteredMetrics = filteredMetrics.filter(
               (v) => v.name.toLowerCase().includes(search.toLowerCase())
             );
+          }
+          if (vendorId) {
+            filteredMetrics = filteredMetrics.filter((v) => v.id === vendorId);
           }
           filteredMetrics.sort((a, b) => {
             const aValue = a[sortBy];
@@ -964,6 +1022,7 @@ var init_storage = __esm({
             }
           };
         }
+        const cutoffDate = planRestrictions?.dataHistoryDays ? new Date(Date.now() - planRestrictions.dataHistoryDays * 24 * 60 * 60 * 1e3) : new Date(Date.now() - 90 * 24 * 60 * 60 * 1e3);
         return {
           data: [],
           pagination: {
@@ -1838,6 +1897,450 @@ var init_cacheService = __esm({
   }
 });
 
+// server/shopifyBilling.ts
+var shopifyBilling_exports = {};
+__export(shopifyBilling_exports, {
+  BILLING_CONFIG: () => BILLING_CONFIG,
+  PLAN_FEATURES: () => PLAN_FEATURES,
+  cancelSubscription: () => cancelSubscription,
+  checkActiveSubscription: () => checkActiveSubscription,
+  createBillingSubscription: () => createBillingSubscription,
+  createPlanEnforcementMiddleware: () => createPlanEnforcementMiddleware,
+  getAvailablePlans: () => getAvailablePlans,
+  getPlanRestrictions: () => getPlanRestrictions2,
+  getStorePlanRestrictions: () => getStorePlanRestrictions,
+  planHasFeature: () => planHasFeature
+});
+import { BillingInterval, BillingReplacementBehavior } from "@shopify/shopify-api";
+function getAvailablePlans() {
+  return Object.keys(BILLING_CONFIG).map((planName) => ({
+    name: planName,
+    amount: BILLING_CONFIG[planName].amount,
+    currencyCode: BILLING_CONFIG[planName].currencyCode,
+    trialDays: BILLING_CONFIG[planName].trialDays,
+    features: BILLING_CONFIG[planName].features
+  }));
+}
+function planHasFeature(planName, feature) {
+  const plan = BILLING_CONFIG[planName];
+  if (!plan || !plan.features || !plan.features.features) {
+    return false;
+  }
+  return plan.features.features.includes(feature);
+}
+function getPlanRestrictions2(planName) {
+  const plan = BILLING_CONFIG[planName];
+  if (!plan) return null;
+  return {
+    vendorLimit: plan.features.vendorLimit,
+    dataHistoryDays: plan.features.dataHistoryDays,
+    features: plan.features.features
+  };
+}
+async function getStorePlanRestrictions(storeId) {
+  try {
+    const useShopifyAuth = process.env.USE_SHOPIFY_AUTH === "true";
+    let userPlan = "Starter";
+    if (useShopifyAuth) {
+      try {
+        const { storage: storage2 } = await Promise.resolve().then(() => (init_storage(), storage_exports));
+        const store = await storage2.getStore(storeId);
+        if (store && store.accessToken) {
+          const session2 = {
+            shop: store.domain,
+            accessToken: store.accessToken
+          };
+          const subscriptionStatus = await checkActiveSubscription(session2);
+          if (subscriptionStatus.hasActiveSubscription && subscriptionStatus.subscription) {
+            userPlan = subscriptionStatus.subscription.name;
+          }
+        }
+      } catch (error) {
+        console.warn("Failed to check subscription status for store plan restrictions:", error);
+      }
+    }
+    const planFeatures = PLAN_FEATURES[userPlan] || PLAN_FEATURES.Starter;
+    return {
+      planName: userPlan,
+      vendorLimit: planFeatures.vendorLimit,
+      dataHistoryDays: planFeatures.dataHistoryDays,
+      features: planFeatures.features,
+      canAddVendor: (currentCount) => {
+        return planFeatures.vendorLimit === -1 || currentCount < planFeatures.vendorLimit;
+      },
+      canAccessData: (date) => {
+        const cutoffDate = /* @__PURE__ */ new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - planFeatures.dataHistoryDays);
+        return date >= cutoffDate;
+      },
+      hasFeature: (feature) => {
+        return planFeatures.features.includes(feature);
+      }
+    };
+  } catch (error) {
+    console.error("Error getting store plan restrictions:", error);
+    const planFeatures = PLAN_FEATURES.Starter;
+    return {
+      planName: "Starter",
+      vendorLimit: planFeatures.vendorLimit,
+      dataHistoryDays: planFeatures.dataHistoryDays,
+      features: planFeatures.features,
+      canAddVendor: (currentCount) => {
+        return planFeatures.vendorLimit === -1 || currentCount < planFeatures.vendorLimit;
+      },
+      canAccessData: (date) => {
+        const cutoffDate = /* @__PURE__ */ new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - planFeatures.dataHistoryDays);
+        return date >= cutoffDate;
+      },
+      hasFeature: (feature) => {
+        return planFeatures.features.includes(feature);
+      }
+    };
+  }
+}
+function createPlanEnforcementMiddleware() {
+  return async (req2, res, next) => {
+    try {
+      if (req2.isDemoMode || req2.user?.isDemoMode) {
+        req2.planRestrictions = {
+          planName: "Demo",
+          vendorLimit: -1,
+          // Unlimited for demo
+          dataHistoryDays: 1825,
+          // 5 years for demo
+          features: ["core-analytics", "advanced-analytics", "custom-reports", "csv-export", "excel-export"],
+          canAddVendor: () => true,
+          canAccessData: () => true,
+          hasFeature: () => true
+        };
+        return next();
+      }
+      const useShopifyAuth = process.env.USE_SHOPIFY_AUTH === "true";
+      let userPlan = "Starter";
+      if (useShopifyAuth) {
+        try {
+          const session2 = res.locals.shopify?.session || req2.shopifySession;
+          if (session2) {
+            const subscriptionStatus = await checkActiveSubscription(session2);
+            if (subscriptionStatus.hasActiveSubscription && subscriptionStatus.subscription) {
+              userPlan = subscriptionStatus.subscription.name;
+            }
+          }
+        } catch (error) {
+          console.warn("Failed to check subscription status for plan enforcement:", error);
+        }
+      }
+      const planFeatures = PLAN_FEATURES[userPlan] || PLAN_FEATURES.Starter;
+      req2.planRestrictions = {
+        planName: userPlan,
+        vendorLimit: planFeatures.vendorLimit,
+        dataHistoryDays: planFeatures.dataHistoryDays,
+        features: planFeatures.features,
+        canAddVendor: (currentCount) => {
+          return planFeatures.vendorLimit === -1 || currentCount < planFeatures.vendorLimit;
+        },
+        canAccessData: (date) => {
+          const cutoffDate = /* @__PURE__ */ new Date();
+          cutoffDate.setDate(cutoffDate.getDate() - planFeatures.dataHistoryDays);
+          return date >= cutoffDate;
+        },
+        hasFeature: (feature) => {
+          return planFeatures.features.includes(feature);
+        }
+      };
+      const url = req2.originalUrl || req2.url;
+      const method = req2.method;
+      if (url.includes("/export/excel") && !planFeatures.features.includes("excel-export")) {
+        return res.status(403).json({
+          message: "Excel export is only available on Growth and Scale plans",
+          requiredPlan: "Growth",
+          currentPlan: userPlan,
+          upgradeUrl: "/billing"
+        });
+      }
+      if (url.includes("/reports/custom") && !planFeatures.features.includes("custom-reports")) {
+        return res.status(403).json({
+          message: "Custom reports are only available on Growth and Scale plans",
+          requiredPlan: "Growth",
+          currentPlan: userPlan,
+          upgradeUrl: "/billing"
+        });
+      }
+      if ((method === "POST" || method === "PUT") && url.includes("/vendors")) {
+        try {
+          const { storage: storage2 } = await Promise.resolve().then(() => (init_storage(), storage_exports));
+          const storeId = req2.params.storeId || req2.body.storeId || res.locals.currentStoreId;
+          if (storeId) {
+            const currentVendors = await storage2.getStoreVendors(storeId);
+            if (method === "POST" && !planFeatures.canAddVendor(currentVendors.length)) {
+              return res.status(403).json({
+                message: `Vendor limit exceeded. Your ${userPlan} plan allows up to ${planFeatures.vendorLimit} vendors.`,
+                currentCount: currentVendors.length,
+                limit: planFeatures.vendorLimit,
+                currentPlan: userPlan,
+                upgradeUrl: "/billing"
+              });
+            }
+          }
+        } catch (error) {
+          console.warn("Failed to check vendor limits in middleware:", error);
+        }
+      }
+      next();
+    } catch (error) {
+      console.error("Plan enforcement middleware error:", error);
+      req2.planRestrictions = {
+        planName: "Starter",
+        vendorLimit: 10,
+        dataHistoryDays: 90,
+        features: ["core-analytics", "csv-export"],
+        canAddVendor: () => true,
+        canAccessData: () => true,
+        hasFeature: (feature) => ["core-analytics", "csv-export"].includes(feature)
+      };
+      next();
+    }
+  };
+}
+async function createBillingSubscription(session2, planName = "Starter") {
+  try {
+    const plan = BILLING_CONFIG[planName];
+    if (!plan) {
+      throw new Error(`Billing plan ${planName} not found`);
+    }
+    const client2 = new (await import("@shopify/shopify-api")).GraphqlClient({
+      session: session2
+    });
+    const mutation = `
+      mutation appSubscriptionCreate(
+        $name: String!
+        $returnUrl: URL!
+        $trialDays: Int
+        $test: Boolean
+        $lineItems: [AppSubscriptionLineItemInput!]!
+      ) {
+        appSubscriptionCreate(
+          name: $name
+          returnUrl: $returnUrl
+          trialDays: $trialDays
+          test: $test
+          lineItems: $lineItems
+        ) {
+          appSubscription {
+            id
+            status
+            name
+            test
+            trialDays
+            currentPeriodEnd
+            createdAt
+          }
+          confirmationUrl
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `;
+    const variables = {
+      name: planName,
+      returnUrl: `${process.env.HOST}/api/billing/callback`,
+      trialDays: plan.trialDays,
+      test: plan.test,
+      lineItems: [
+        {
+          plan: {
+            appRecurringPricingDetails: {
+              price: {
+                amount: plan.amount,
+                currencyCode: plan.currencyCode
+              },
+              interval: plan.interval
+            }
+          }
+        }
+      ]
+    };
+    const response = await client2.request(mutation, { variables });
+    if (response.data.appSubscriptionCreate.userErrors.length > 0) {
+      console.error("Billing subscription errors:", response.data.appSubscriptionCreate.userErrors);
+      throw new Error(response.data.appSubscriptionCreate.userErrors[0].message);
+    }
+    return {
+      subscription: response.data.appSubscriptionCreate.appSubscription,
+      confirmationUrl: response.data.appSubscriptionCreate.confirmationUrl
+    };
+  } catch (error) {
+    console.error("Error creating billing subscription:", error);
+    throw error;
+  }
+}
+async function checkActiveSubscription(session2) {
+  try {
+    const client2 = new (await import("@shopify/shopify-api")).GraphqlClient({
+      session: session2
+    });
+    const query = `
+      query {
+        currentAppInstallation {
+          activeSubscriptions {
+            id
+            name
+            status
+            test
+            trialDays
+            currentPeriodEnd
+            createdAt
+            lineItems {
+              id
+              plan {
+                pricingDetails {
+                  ... on AppRecurringPricing {
+                    price {
+                      amount
+                      currencyCode
+                    }
+                    interval
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+    const response = await client2.request(query);
+    const subscriptions2 = response.data?.currentAppInstallation?.activeSubscriptions || [];
+    const validPlanNames = Object.keys(BILLING_CONFIG);
+    const activeSubscription = subscriptions2.find(
+      (sub) => sub.status === "ACTIVE" && validPlanNames.includes(sub.name)
+    );
+    return {
+      hasActiveSubscription: !!activeSubscription,
+      subscription: activeSubscription,
+      isInTrial: activeSubscription?.trialDays > 0 && new Date(activeSubscription.currentPeriodEnd) > /* @__PURE__ */ new Date()
+    };
+  } catch (error) {
+    console.error("Error checking subscription status:", error);
+    return {
+      hasActiveSubscription: false,
+      subscription: null,
+      isInTrial: false
+    };
+  }
+}
+async function cancelSubscription(session2, subscriptionId) {
+  try {
+    const client2 = new (await import("@shopify/shopify-api")).GraphqlClient({
+      session: session2
+    });
+    const mutation = `
+      mutation appSubscriptionCancel($id: ID!) {
+        appSubscriptionCancel(id: $id) {
+          appSubscription {
+            id
+            status
+            cancelledAt
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `;
+    const response = await client2.request(mutation, {
+      variables: { id: subscriptionId }
+    });
+    if (response.data.appSubscriptionCancel.userErrors.length > 0) {
+      throw new Error(response.data.appSubscriptionCancel.userErrors[0].message);
+    }
+    return response.data.appSubscriptionCancel.appSubscription;
+  } catch (error) {
+    console.error("Error cancelling subscription:", error);
+    throw error;
+  }
+}
+var PLAN_FEATURES, BILLING_CONFIG;
+var init_shopifyBilling = __esm({
+  "server/shopifyBilling.ts"() {
+    "use strict";
+    PLAN_FEATURES = {
+      "Starter": {
+        vendorLimit: 10,
+        dataHistoryDays: 90,
+        features: ["core-analytics", "email-support", "csv-export"],
+        displayFeatures: [
+          "Up to 10 brands/vendors",
+          "90-day data history",
+          "Core analytics dashboard",
+          "Email support",
+          "CSV export"
+        ]
+      },
+      "Growth": {
+        vendorLimit: 50,
+        dataHistoryDays: 365,
+        features: ["advanced-analytics", "priority-support", "custom-reports", "csv-export", "excel-export"],
+        displayFeatures: [
+          "Up to 50 brands/vendors",
+          "1-year data history",
+          "Advanced analytics",
+          "Priority support",
+          "Custom reports",
+          "Excel export"
+        ]
+      },
+      "Scale": {
+        vendorLimit: -1,
+        // Unlimited
+        dataHistoryDays: 1825,
+        // 5 years
+        features: ["advanced-analytics", "priority-support", "custom-reports", "white-label-reports", "csv-export", "excel-export"],
+        displayFeatures: [
+          "Unlimited brands/vendors",
+          "5-year data history",
+          "White-label reports",
+          "Priority support",
+          "Custom reports",
+          "Excel export"
+        ]
+      }
+    };
+    BILLING_CONFIG = {
+      "Starter": {
+        amount: 49,
+        currencyCode: "USD",
+        interval: BillingInterval.Every30Days,
+        trialDays: 3,
+        replacementBehavior: BillingReplacementBehavior.ApplyImmediately,
+        test: process.env.NODE_ENV === "development",
+        features: PLAN_FEATURES.Starter
+      },
+      "Growth": {
+        amount: 99,
+        currencyCode: "USD",
+        interval: BillingInterval.Every30Days,
+        trialDays: 3,
+        replacementBehavior: BillingReplacementBehavior.ApplyImmediately,
+        test: process.env.NODE_ENV === "development",
+        features: PLAN_FEATURES.Growth
+      },
+      "Scale": {
+        amount: 199,
+        currencyCode: "USD",
+        interval: BillingInterval.Every30Days,
+        trialDays: 3,
+        replacementBehavior: BillingReplacementBehavior.ApplyImmediately,
+        test: process.env.NODE_ENV === "development",
+        features: PLAN_FEATURES.Scale
+      }
+    };
+  }
+});
+
 // server/services/shopifyService.ts
 var shopifyService_exports = {};
 __export(shopifyService_exports, {
@@ -1988,13 +2491,38 @@ var init_shopifyService = __esm({
                 newVendorsToCreate.add(shopifyProduct.vendor);
               }
             }
-            for (const vendorName of Array.from(newVendorsToCreate)) {
-              const newVendor = await storage.createVendor({
-                storeId: store.id,
-                name: vendorName,
-                slug: vendorName.toLowerCase().replace(/\s+/g, "-")
-              });
-              vendorMap.set(vendorName, newVendor);
+            if (newVendorsToCreate.size > 0) {
+              const { getStorePlanRestrictions: getStorePlanRestrictions2 } = await Promise.resolve().then(() => (init_shopifyBilling(), shopifyBilling_exports));
+              const planRestrictions = await getStorePlanRestrictions2(store.id);
+              const currentVendorCount = existingVendors.length;
+              const newVendorCount = currentVendorCount + newVendorsToCreate.size;
+              if (!planRestrictions.canAddVendor(newVendorCount - 1)) {
+                console.warn(`Plan limit exceeded: Cannot create ${newVendorsToCreate.size} new vendors. Current: ${currentVendorCount}, Limit: ${planRestrictions.vendorLimit}, Plan: ${planRestrictions.planName}`);
+                const allowedNewVendors = Math.max(0, planRestrictions.vendorLimit - currentVendorCount);
+                if (allowedNewVendors > 0) {
+                  const vendorsToCreate = Array.from(newVendorsToCreate).slice(0, allowedNewVendors);
+                  console.log(`Creating ${allowedNewVendors} vendors up to plan limit (${planRestrictions.planName})`);
+                  for (const vendorName of vendorsToCreate) {
+                    const newVendor = await storage.createVendor({
+                      storeId: store.id,
+                      name: vendorName,
+                      slug: vendorName.toLowerCase().replace(/\s+/g, "-")
+                    });
+                    vendorMap.set(vendorName, newVendor);
+                  }
+                } else {
+                  console.warn(`Vendor limit reached. Cannot create any new vendors. Plan: ${planRestrictions.planName}, Limit: ${planRestrictions.vendorLimit}`);
+                }
+              } else {
+                for (const vendorName of Array.from(newVendorsToCreate)) {
+                  const newVendor = await storage.createVendor({
+                    storeId: store.id,
+                    name: vendorName,
+                    slug: vendorName.toLowerCase().replace(/\s+/g, "-")
+                  });
+                  vendorMap.set(vendorName, newVendor);
+                }
+              }
             }
             if (newVendorsToCreate.size > 0) {
               cacheService.invalidateStore(store.id);
@@ -2276,11 +2804,19 @@ var init_shopifyService = __esm({
             (vendors2) => vendors2.find((v) => v.name === productData.vendor)
           );
           if (!vendor && productData.vendor) {
-            vendor = await storage.createVendor({
-              storeId,
-              name: productData.vendor,
-              slug: productData.vendor.toLowerCase().replace(/\s+/g, "-")
-            });
+            const { getStorePlanRestrictions: getStorePlanRestrictions2 } = await Promise.resolve().then(() => (init_shopifyBilling(), shopifyBilling_exports));
+            const planRestrictions = await getStorePlanRestrictions2(storeId);
+            const currentVendors = await storage.getStoreVendors(storeId);
+            if (planRestrictions.canAddVendor(currentVendors.length)) {
+              vendor = await storage.createVendor({
+                storeId,
+                name: productData.vendor,
+                slug: productData.vendor.toLowerCase().replace(/\s+/g, "-")
+              });
+              console.log(`Created new vendor "${productData.vendor}" for store ${storeId}. Plan: ${planRestrictions.planName}`);
+            } else {
+              console.warn(`Cannot create vendor "${productData.vendor}": Plan limit exceeded. Current: ${currentVendors.length}, Limit: ${planRestrictions.vendorLimit}, Plan: ${planRestrictions.planName}`);
+            }
           }
           const product = {
             id: productData.id.toString(),
@@ -2518,13 +3054,13 @@ async function registerWebhooks(session2) {
   }
 }
 function verifyWebhookHMAC(secret) {
-  return (req, res, next) => {
-    const hmacHeader = req.get("X-Shopify-Hmac-Sha256");
+  return (req2, res, next) => {
+    const hmacHeader = req2.get("X-Shopify-Hmac-Sha256");
     if (!hmacHeader) {
       console.log("Webhook verification failed: No HMAC header");
       return res.status(401).send("Unauthorized");
     }
-    const rawBody = req.body;
+    const rawBody = req2.body;
     if (!rawBody || !Buffer.isBuffer(rawBody)) {
       console.log("Webhook verification failed: No raw body");
       return res.status(401).send("Unauthorized");
@@ -2535,7 +3071,7 @@ function verifyWebhookHMAC(secret) {
       return res.status(401).send("Unauthorized");
     }
     try {
-      req.body = JSON.parse(rawBody.toString("utf8"));
+      req2.body = JSON.parse(rawBody.toString("utf8"));
     } catch (error) {
       console.error("Failed to parse webhook body:", TokenEncryption.sanitizeForLogging(error));
       return res.status(400).send("Bad Request");
@@ -2666,15 +3202,15 @@ async function setupWebhookEndpoint(app2, path4 = "/api/webhooks") {
     path4,
     express.raw({ type: "application/json" }),
     verifyWebhookHMAC(webhookSecret),
-    async (req, res) => {
+    async (req2, res) => {
       try {
-        const topic = req.get("X-Shopify-Topic");
-        const shop = req.get("X-Shopify-Shop-Domain");
-        const webhookId = req.get("X-Shopify-Webhook-Id");
+        const topic = req2.get("X-Shopify-Topic");
+        const shop = req2.get("X-Shopify-Shop-Domain");
+        const webhookId = req2.get("X-Shopify-Webhook-Id");
         console.log(`Processing webhook: ${topic} from ${shop}`);
         const handler = allWebhookHandlers[topic];
         if (handler) {
-          await handler(topic, shop, JSON.stringify(req.body), webhookId);
+          await handler(topic, shop, JSON.stringify(req2.body), webhookId);
           res.status(200).send("OK");
         } else {
           console.warn(`No handler for webhook topic: ${topic}`);
@@ -2692,52 +3228,89 @@ async function setupShopifyAuth(app2) {
   validateShopifyConfig();
   const shopifyInstance = initializeShopify();
   app2.set("trust proxy", 1);
-  app2.use(shopifyInstance.cspHeaders());
-  app2.use((req, res, next) => {
-    const shop = req.query.shop || req.headers["x-shopify-shop-domain"];
-    if (shop || req.path === "/" || req.path.startsWith("/welcome") || req.path.startsWith("/dashboard")) {
-      const existingCSP = res.getHeader("Content-Security-Policy") || "";
-      let frameAncestors = "https://admin.shopify.com https://*.myshopify.com";
-      if (shop) {
-        frameAncestors = `https://${shop} https://admin.shopify.com`;
-      }
-      if (existingCSP) {
-        const updatedCSP = existingCSP.replace(
-          /frame-ancestors[^;]*(;|$)/,
-          `frame-ancestors ${frameAncestors};`
-        );
-        if (updatedCSP === existingCSP) {
-          res.setHeader("Content-Security-Policy", `${existingCSP} frame-ancestors ${frameAncestors};`);
-        } else {
-          res.setHeader("Content-Security-Policy", updatedCSP);
-        }
-      } else {
-        res.setHeader(
-          "Content-Security-Policy",
-          `default-src 'self' https://*.myshopify.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.shopify.com; style-src 'self' 'unsafe-inline' https://cdn.shopify.com; img-src 'self' data: https:; font-src 'self' data: https:; connect-src 'self' https://*.myshopify.com; frame-ancestors ${frameAncestors};`
-        );
-      }
+  app2.use((req2, res, next) => {
+    const shop = req2.query.shop || req2.headers["x-shopify-shop-domain"];
+    let frameAncestors = "https://admin.shopify.com https://*.myshopify.com";
+    if (shop) {
+      frameAncestors = `https://${shop} https://admin.shopify.com`;
     }
+    const cspDirectives = [
+      // Allow self and Shopify domains for default resources
+      "default-src 'self' https://*.myshopify.com https://cdn.shopify.com",
+      // Scripts: Allow self, inline scripts, eval, and Shopify CDN + admin resources
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.shopify.com https://admin.shopify.com https://*.myshopify.com",
+      // Styles: Allow self, inline styles, and Shopify resources
+      "style-src 'self' 'unsafe-inline' https://cdn.shopify.com https://admin.shopify.com https://*.myshopify.com",
+      // Images: Allow self, data URIs, blob URIs, and all HTTPS sources
+      "img-src 'self' data: blob: https:",
+      // Fonts: Allow self, data URIs, and HTTPS sources
+      "font-src 'self' data: https:",
+      // Connections: Allow self, websockets, and HTTPS (including Shopify domains)
+      "connect-src 'self' ws: wss: https: https://*.myshopify.com https://admin.shopify.com",
+      // Worker sources: Allow self and blob for web workers
+      "worker-src 'self' blob:",
+      // Child sources: Allow self and blob for iframes/workers
+      "child-src 'self' blob:",
+      // Object sources: Block object/embed tags for security
+      "object-src 'none'",
+      // Base URI: Restrict to self
+      "base-uri 'self'",
+      // Form actions: Allow self and Shopify domains
+      "form-action 'self' https://*.myshopify.com https://admin.shopify.com",
+      // Frame ancestors: Critical for embedded app functionality
+      `frame-ancestors ${frameAncestors}`,
+      // Media sources: Allow self and HTTPS
+      "media-src 'self' https:"
+    ];
+    res.setHeader("Content-Security-Policy", cspDirectives.join("; "));
+    res.removeHeader("X-Frame-Options");
     next();
   });
-  app2.get("/api/login", (req, res) => {
-    const shop = req.query.shop || process.env.DEFAULT_SHOP_DOMAIN || "";
+  app2.get("/api/login", (req2, res) => {
+    console.log("[LOGIN DEBUG] Login route called with query:", req2.query);
+    console.log("[LOGIN DEBUG] Login route referer:", req2.get("referer"));
+    let shop = req2.query.shop || process.env.DEFAULT_SHOP_DOMAIN || "";
+    const host = req2.query.host;
+    const embedded = req2.query.embedded === "1";
+    const referer = req2.get("referer") || "";
+    const isFromShopifyAdmin = referer.includes("admin.shopify.com");
+    if (!shop && isFromShopifyAdmin) {
+      try {
+        const refererUrl = new URL(referer);
+        const pathParts = refererUrl.pathname.split("/");
+        const storeIndex = pathParts.indexOf("store");
+        if (storeIndex !== -1 && pathParts[storeIndex + 1]) {
+          shop = `${pathParts[storeIndex + 1]}.myshopify.com`;
+          console.log("[LOGIN DEBUG] Extracted shop from referer:", shop);
+        }
+      } catch (error) {
+        console.log("[LOGIN DEBUG] Failed to parse referer URL:", error);
+      }
+    }
     if (shop) {
-      console.log(`Initiating OAuth for shop: ${shop}`);
-      res.redirect(`/api/auth?shop=${shop}`);
+      const authUrl = `/api/auth?shop=${encodeURIComponent(shop)}${host ? `&host=${encodeURIComponent(host)}` : ""}`;
+      console.log(`[LOGIN DEBUG] Initiating OAuth for shop: ${shop}, redirect to: ${authUrl}`);
+      res.redirect(authUrl);
     } else {
-      const referer = req.get("referer") || "";
-      const isEmbedded = referer.includes("admin.shopify.com") || req.query.embedded === "1";
+      const isEmbedded = isFromShopifyAdmin || embedded;
       if (isEmbedded) {
-        res.status(400).send(`
-          <html>
-            <body>
-              <h2>Shop parameter required</h2>
-              <p>Please access this app from your Shopify admin panel.</p>
-            </body>
-          </html>
-        `);
+        console.log("[LOGIN DEBUG] Embedded app without shop parameter - returning 401 with requiresReload");
+        const authUrl = "/api/auth";
+        return res.status(401).json({
+          message: "Shop parameter required for embedded app",
+          requiresReload: true,
+          loginUrl: authUrl,
+          isEmbedded: true,
+          debug: {
+            referer: req2.get("referer"),
+            userAgent: req2.get("user-agent"),
+            host: req2.get("host"),
+            embedded,
+            isFromShopifyAdmin
+          }
+        });
       } else {
+        console.log("[LOGIN DEBUG] Standalone access, redirecting to landing page");
         res.redirect("/");
       }
     }
@@ -2746,7 +3319,7 @@ async function setupShopifyAuth(app2) {
   app2.get(
     shopifyInstance.config.auth.callbackPath,
     shopifyInstance.auth.callback(),
-    async (req, res, next) => {
+    async (req2, res, next) => {
       try {
         const session2 = res.locals.shopify?.session;
         if (session2?.accessToken && session2?.shop) {
@@ -2760,14 +3333,14 @@ async function setupShopifyAuth(app2) {
       }
     },
     // Custom redirect to ensure proper embedded app loading
-    async (req, res) => {
+    async (req2, res) => {
       const session2 = res.locals.shopify?.session;
       console.log("[OAUTH CALLBACK] Session data:", session2 ? { shop: session2.shop, hasAccessToken: !!session2.accessToken } : "No session");
       if (session2?.shop && session2?.accessToken) {
-        const host = req.query.host;
+        const host = req2.query.host;
         const shop = session2.shop;
         console.log(`[OAUTH CALLBACK] Auth successful for ${shop}, host: ${host}`);
-        if (host || req.get("referer")?.includes("admin.shopify.com")) {
+        if (host || req2.get("referer")?.includes("admin.shopify.com")) {
           const redirectUrl = `/dashboard?shop=${encodeURIComponent(shop)}${host ? `&host=${encodeURIComponent(host)}` : ""}`;
           console.log(`[OAUTH CALLBACK] Redirecting to embedded dashboard: ${redirectUrl}`);
           res.redirect(redirectUrl);
@@ -2782,29 +3355,30 @@ async function setupShopifyAuth(app2) {
     }
   );
   await setupWebhookEndpoint(app2, shopifyInstance.config.webhooks.path);
-  app2.use((req, res, next) => {
-    const shop = req.query.shop || req.headers["x-shopify-shop-domain"];
-    if (shop && !req.path.startsWith("/api/")) {
+  app2.use((req2, res, next) => {
+    const shop = req2.query.shop || req2.headers["x-shopify-shop-domain"];
+    if (shop && !req2.path.startsWith("/api/")) {
       res.removeHeader("X-Frame-Options");
     }
     next();
   });
-  app2.use((req, res, next) => {
-    if (req.path === "/api/auth" || req.path === "/api/auth/callback" || req.path === "/api/auth/user" || // Always skip for /api/auth/user - let route handler manage it
-    req.path === "/api/login" || req.path === "/api/webhooks" || req.path === "/api/stores/manual-setup" || req.path.startsWith("/legal/")) {
+  app2.use((req2, res, next) => {
+    if (req2.path === "/api/auth" || req2.path === "/api/auth/callback" || req2.path === "/api/auth/user" || // Always skip for /api/auth/user - let route handler manage it
+    req2.path === "/api/login" || req2.path === "/api/webhooks" || req2.path === "/api/stores/manual-setup" || req2.path === "/api/billing/status" || // Allow billing status for demo mode
+    req2.path.startsWith("/legal/")) {
       return next();
     }
     if (process.env.DEFAULT_SHOP_DOMAIN) {
-      if (req.path === "/api/stores" || req.path.startsWith("/api/stores/")) {
+      if (req2.path === "/api/stores" || req2.path.startsWith("/api/stores/")) {
         return next();
       }
     }
-    if (req.path.startsWith("/api/")) {
-      const shop = req.query.shop || req.headers["x-shopify-shop-domain"] || res.locals.shopify?.session?.shop;
+    if (req2.path.startsWith("/api/")) {
+      const shop = req2.query.shop || req2.headers["x-shopify-shop-domain"] || res.locals.shopify?.session?.shop;
       if (!shop) {
         return res.status(401).json({ message: "Unauthorized - Shop context required" });
       }
-      return shopifyInstance.validateAuthenticatedSession()(req, res, next);
+      return shopifyInstance.validateAuthenticatedSession()(req2, res, next);
     }
     next();
   });
@@ -2827,15 +3401,15 @@ var init_shopifyAuth = __esm({
     init_storage();
     init_tokenEncryption();
     shopify = null;
-    authenticateShopify = async (req, res, next) => {
+    authenticateShopify = async (req2, res, next) => {
       try {
         const session2 = res.locals.shopify?.session;
         if (!session2 || !session2.accessToken) {
           return res.status(401).json({ message: "Unauthorized - No valid Shopify session" });
         }
         await upsertShopifyUser(session2);
-        req.shopifySession = session2;
-        req.shopifyUser = {
+        req2.shopifySession = session2;
+        req2.shopifyUser = {
           id: session2.onlineAccessInfo?.associated_user?.id || session2.shop,
           shop: session2.shop,
           accessToken: session2.accessToken
@@ -2963,32 +3537,32 @@ async function setupAuth(app2) {
   }
   passport.serializeUser((user, cb) => cb(null, user));
   passport.deserializeUser((user, cb) => cb(null, user));
-  app2.get("/api/login", (req, res, next) => {
-    passport.authenticate(`replitauth:${req.hostname}`, {
+  app2.get("/api/login", (req2, res, next) => {
+    passport.authenticate(`replitauth:${req2.hostname}`, {
       prompt: "login consent",
       scope: ["openid", "email", "profile", "offline_access"]
-    })(req, res, next);
+    })(req2, res, next);
   });
-  app2.get("/api/callback", (req, res, next) => {
-    passport.authenticate(`replitauth:${req.hostname}`, {
+  app2.get("/api/callback", (req2, res, next) => {
+    passport.authenticate(`replitauth:${req2.hostname}`, {
       successReturnToOrRedirect: "/",
       failureRedirect: "/api/login"
-    })(req, res, next);
+    })(req2, res, next);
   });
-  app2.get("/api/logout", (req, res) => {
-    req.logout(() => {
+  app2.get("/api/logout", (req2, res) => {
+    req2.logout(() => {
       res.redirect(
         client.buildEndSessionUrl(config, {
           client_id: process.env.REPL_ID,
-          post_logout_redirect_uri: `${req.protocol}://${req.hostname}`
+          post_logout_redirect_uri: `${req2.protocol}://${req2.hostname}`
         }).href
       );
     });
   });
 }
-var isAuthenticated = async (req, res, next) => {
-  const user = req.user;
-  if (!req.isAuthenticated() || !user.expires_at) {
+var isAuthenticated = async (req2, res, next) => {
+  const user = req2.user;
+  if (!req2.isAuthenticated() || !user.expires_at) {
     return res.status(401).json({ message: "Unauthorized" });
   }
   const now = Math.floor(Date.now() / 1e3);
@@ -3014,182 +3588,7 @@ var isAuthenticated = async (req, res, next) => {
 // server/routes.ts
 init_shopifyService();
 init_schema();
-
-// server/shopifyBilling.ts
-import { BillingInterval, BillingReplacementBehavior } from "@shopify/shopify-api";
-var BILLING_CONFIG = {
-  // Single paid plan: $69/month with 3-day free trial
-  "BrandSight Premium": {
-    amount: 69,
-    currencyCode: "USD",
-    interval: BillingInterval.Every30Days,
-    trialDays: 3,
-    replacementBehavior: BillingReplacementBehavior.ApplyImmediately,
-    test: process.env.NODE_ENV === "development"
-    // Use test mode in development
-  }
-};
-async function createBillingSubscription(session2, planName = "BrandSight Premium") {
-  try {
-    const plan = BILLING_CONFIG[planName];
-    if (!plan) {
-      throw new Error(`Billing plan ${planName} not found`);
-    }
-    const client2 = new (await import("@shopify/shopify-api")).GraphqlClient({
-      session: session2
-    });
-    const mutation = `
-      mutation appSubscriptionCreate(
-        $name: String!
-        $returnUrl: URL!
-        $trialDays: Int
-        $test: Boolean
-        $lineItems: [AppSubscriptionLineItemInput!]!
-      ) {
-        appSubscriptionCreate(
-          name: $name
-          returnUrl: $returnUrl
-          trialDays: $trialDays
-          test: $test
-          lineItems: $lineItems
-        ) {
-          appSubscription {
-            id
-            status
-            name
-            test
-            trialDays
-            currentPeriodEnd
-            createdAt
-          }
-          confirmationUrl
-          userErrors {
-            field
-            message
-          }
-        }
-      }
-    `;
-    const variables = {
-      name: planName,
-      returnUrl: `${process.env.HOST}/api/billing/callback`,
-      trialDays: plan.trialDays,
-      test: plan.test,
-      lineItems: [
-        {
-          plan: {
-            appRecurringPricingDetails: {
-              price: {
-                amount: plan.amount,
-                currencyCode: plan.currencyCode
-              },
-              interval: plan.interval
-            }
-          }
-        }
-      ]
-    };
-    const response = await client2.request(mutation, { variables });
-    if (response.data.appSubscriptionCreate.userErrors.length > 0) {
-      console.error("Billing subscription errors:", response.data.appSubscriptionCreate.userErrors);
-      throw new Error(response.data.appSubscriptionCreate.userErrors[0].message);
-    }
-    return {
-      subscription: response.data.appSubscriptionCreate.appSubscription,
-      confirmationUrl: response.data.appSubscriptionCreate.confirmationUrl
-    };
-  } catch (error) {
-    console.error("Error creating billing subscription:", error);
-    throw error;
-  }
-}
-async function checkActiveSubscription(session2) {
-  try {
-    const client2 = new (await import("@shopify/shopify-api")).GraphqlClient({
-      session: session2
-    });
-    const query = `
-      query {
-        currentAppInstallation {
-          activeSubscriptions {
-            id
-            name
-            status
-            test
-            trialDays
-            currentPeriodEnd
-            createdAt
-            lineItems {
-              id
-              plan {
-                pricingDetails {
-                  ... on AppRecurringPricing {
-                    price {
-                      amount
-                      currencyCode
-                    }
-                    interval
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    `;
-    const response = await client2.request(query);
-    const subscriptions = response.data?.currentAppInstallation?.activeSubscriptions || [];
-    const activeSubscription = subscriptions.find(
-      (sub) => sub.status === "ACTIVE" && sub.name === "BrandSight Premium"
-    );
-    return {
-      hasActiveSubscription: !!activeSubscription,
-      subscription: activeSubscription,
-      isInTrial: activeSubscription?.trialDays > 0 && new Date(activeSubscription.currentPeriodEnd) > /* @__PURE__ */ new Date()
-    };
-  } catch (error) {
-    console.error("Error checking subscription status:", error);
-    return {
-      hasActiveSubscription: false,
-      subscription: null,
-      isInTrial: false
-    };
-  }
-}
-async function cancelSubscription(session2, subscriptionId) {
-  try {
-    const client2 = new (await import("@shopify/shopify-api")).GraphqlClient({
-      session: session2
-    });
-    const mutation = `
-      mutation appSubscriptionCancel($id: ID!) {
-        appSubscriptionCancel(id: $id) {
-          appSubscription {
-            id
-            status
-            cancelledAt
-          }
-          userErrors {
-            field
-            message
-          }
-        }
-      }
-    `;
-    const response = await client2.request(mutation, {
-      variables: { id: subscriptionId }
-    });
-    if (response.data.appSubscriptionCancel.userErrors.length > 0) {
-      throw new Error(response.data.appSubscriptionCancel.userErrors[0].message);
-    }
-    return response.data.appSubscriptionCancel.appSubscription;
-  } catch (error) {
-    console.error("Error cancelling subscription:", error);
-    throw error;
-  }
-}
-
-// server/routes.ts
+init_shopifyBilling();
 init_cacheService();
 import * as csv from "fast-csv";
 import * as XLSX from "xlsx";
@@ -3236,7 +3635,9 @@ async function streamVendorCSVExport(storeId, params, res, dateRange) {
           limit: batchSize,
           sortBy: params.sortBy,
           sortDirection: params.sortDirection,
-          search: params.search
+          search: params.search,
+          vendorId: params.vendorId,
+          planRestrictions: req?.planRestrictions
         });
         for (const vendor of result.data) {
           csvStream.write({
@@ -3272,7 +3673,9 @@ async function streamVendorExcelExport(storeId, params, res, dateRange) {
         limit: batchSize,
         sortBy: params.sortBy,
         sortDirection: params.sortDirection,
-        search: params.search
+        search: params.search,
+        vendorId: params.vendorId,
+        planRestrictions: req.planRestrictions
       });
       allVendors.push(...result.data);
       hasMoreData = result.pagination.hasNext;
@@ -3350,29 +3753,30 @@ async function registerRoutes(app2) {
     await setupShopifyWebhooks2(app2);
   }
   const authenticate = useShopifyAuth ? authenticateShopify2 : isAuthenticated;
-  const authenticateOrDemo = (req, res, next) => {
-    const userId = getUserId(req);
+  const planEnforcement = createPlanEnforcementMiddleware();
+  const authenticateOrDemo = (req2, res, next) => {
+    const userId = getUserId(req2);
     if (userId) {
       next();
     } else {
-      req.isDemoMode = true;
-      req.user = {
+      req2.isDemoMode = true;
+      req2.user = {
         claims: { sub: "demo_user" },
         isDemoMode: true
       };
       next();
     }
   };
-  const getUserId = (req) => {
+  const getUserId = (req2) => {
     if (useShopifyAuth) {
-      const rawId = req.shopifyUser?.id || req.shopifySession?.shop;
+      const rawId = req2.shopifyUser?.id || req2.shopifySession?.shop;
       return rawId ? `shopify_${rawId}` : null;
     } else {
-      return req.user?.claims?.sub;
+      return req2.user?.claims?.sub;
     }
   };
-  const getUserCurrentStore = async (req) => {
-    const userId = getUserId(req);
+  const getUserCurrentStore = async (req2) => {
+    const userId = getUserId(req2);
     if (!userId) {
       return {
         id: "demo_store_1",
@@ -3521,19 +3925,61 @@ async function registerRoutes(app2) {
 </body>
 </html>`);
   });
-  app2.get("/api/auth/user", async (req, res, next) => {
-    console.log("[AUTH DEBUG] /api/auth/user called, useShopifyAuth:", useShopifyAuth);
+  app2.get("/api/auth/user", async (req2, res, next) => {
+    console.log("[AUTH DEBUG] ==> /api/auth/user endpoint called");
+    console.log("[AUTH DEBUG] useShopifyAuth:", useShopifyAuth);
+    console.log("[AUTH DEBUG] Request query params:", req2.query);
+    console.log("[AUTH DEBUG] Request referrer:", req2.get("referer"));
+    console.log("[AUTH DEBUG] Request headers (Shopify):", Object.keys(req2.headers).filter((h) => h.includes("shopify")));
+    console.log("[AUTH DEBUG] Session exists:", !!res.locals.shopify?.session);
+    console.log("[AUTH DEBUG] Session shop:", res.locals.shopify?.session?.shop);
     if (useShopifyAuth) {
       try {
-        const shop = req.query.shop || req.headers["x-shopify-shop-domain"] || res.locals.shopify?.session?.shop;
-        const host = req.query.host || req.headers["x-shopify-host"];
-        console.log("[AUTH DEBUG] Shop:", shop, "Host:", host);
-        if (!shop) {
-          const loginUrl2 = `/api/login?${new URLSearchParams({
-            ...host && { host }
-          }).toString()}`;
-          console.log("[AUTH DEBUG] No shop context, returning 401 with loginUrl:", loginUrl2);
-          return res.status(401).json({ loginUrl: loginUrl2 });
+        let shop = req2.query.shop || req2.headers["x-shopify-shop-domain"] || res.locals.shopify?.session?.shop;
+        let host = req2.query.host || req2.headers["x-shopify-host"];
+        const referer = req2.get("referer") || "";
+        const isFromShopifyAdmin = referer.includes("admin.shopify.com");
+        if (!shop && isFromShopifyAdmin) {
+          const refererUrl = new URL(referer);
+          const pathParts = refererUrl.pathname.split("/");
+          const storeIndex = pathParts.indexOf("store");
+          if (storeIndex !== -1 && pathParts[storeIndex + 1]) {
+            shop = `${pathParts[storeIndex + 1]}.myshopify.com`;
+            console.log("[AUTH DEBUG] Extracted shop from referer:", shop);
+          }
+        }
+        const isEmbeddedContext = isFromShopifyAdmin || req2.query.embedded === "1" || req2.headers["x-shopify-embedded"] === "1" || req2.get("user-agent")?.includes("Shopify");
+        console.log("[AUTH DEBUG] Shop:", shop, "Host:", host, "Embedded context:", isEmbeddedContext);
+        if (!shop && !isEmbeddedContext) {
+          console.log("[AUTH DEBUG] No shop context and not embedded, enabling demo mode");
+          const demoUser = {
+            id: "demo_user",
+            email: "demo@example.com",
+            firstName: "Demo",
+            lastName: "User",
+            profileImageUrl: null
+          };
+          return res.json(demoUser);
+        }
+        if (!shop && isEmbeddedContext) {
+          console.log("[AUTH DEBUG] ==> Embedded context detected but no shop parameter found");
+          console.log("[AUTH DEBUG] Referer:", referer);
+          console.log("[AUTH DEBUG] User-Agent:", req2.get("user-agent"));
+          console.log("[AUTH DEBUG] All headers:", Object.keys(req2.headers).join(", "));
+          const loginUrl2 = `/api/login?embedded=1${host ? `&host=${encodeURIComponent(host)}` : ""}`;
+          console.log("[AUTH DEBUG] Returning 401 for embedded app with loginUrl:", loginUrl2);
+          return res.status(401).json({
+            message: "Shop parameter required for embedded app",
+            loginUrl: loginUrl2,
+            requiresReload: true,
+            isEmbedded: true,
+            debug: {
+              referer,
+              userAgent: req2.get("user-agent"),
+              isFromShopifyAdmin,
+              headers: Object.keys(req2.headers).filter((h) => h.includes("shopify"))
+            }
+          });
         }
         let sessionValid = false;
         try {
@@ -3541,7 +3987,7 @@ async function registerRoutes(app2) {
           const shopifyInstance = initializeShopify2();
           if (shopifyInstance && shopifyInstance.config) {
             await new Promise((resolve, reject) => {
-              shopifyInstance.validateAuthenticatedSession()(req, res, (error) => {
+              shopifyInstance.validateAuthenticatedSession()(req2, res, (error) => {
                 if (error) {
                   console.log("[AUTH DEBUG] Shopify session validation failed:", error.message);
                   reject(error);
@@ -3597,12 +4043,28 @@ async function registerRoutes(app2) {
           shop,
           ...host && { host }
         }).toString()}`;
-        console.log("[AUTH DEBUG] No valid session or active store, returning 401 with loginUrl:", loginUrl);
-        return res.status(401).json({ loginUrl });
+        console.log("[AUTH DEBUG] ==> No valid session or active store found");
+        console.log("[AUTH DEBUG] Shop:", shop, "Host:", host);
+        console.log("[AUTH DEBUG] Embedded context:", isEmbeddedContext);
+        console.log("[AUTH DEBUG] Returning 401 with loginUrl:", loginUrl);
+        return res.status(401).json({
+          message: isEmbeddedContext ? "Authentication required for embedded app" : "Authentication required",
+          loginUrl,
+          requiresReload: isEmbeddedContext,
+          isEmbedded: isEmbeddedContext,
+          debug: {
+            shop,
+            host,
+            referer,
+            isFromShopifyAdmin,
+            hasSession: !!res.locals.shopify?.session,
+            sessionShop: res.locals.shopify?.session?.shop
+          }
+        });
       } catch (error) {
         console.error("[AUTH DEBUG] Unexpected error in auth/user:", error);
-        const shop = req.query.shop || req.headers["x-shopify-shop-domain"];
-        const host = req.query.host || req.headers["x-shopify-host"];
+        const shop = req2.query.shop || req2.headers["x-shopify-shop-domain"];
+        const host = req2.query.host || req2.headers["x-shopify-host"];
         const loginUrl = `/api/login?${new URLSearchParams({
           ...shop && { shop },
           ...host && { host }
@@ -3610,9 +4072,9 @@ async function registerRoutes(app2) {
         return res.status(401).json({ loginUrl });
       }
     }
-    authenticate(req, res, async () => {
+    authenticate(req2, res, async () => {
       try {
-        const userId = getUserId(req);
+        const userId = getUserId(req2);
         if (!userId) {
           return res.status(401).json({ message: "No user ID found" });
         }
@@ -3627,8 +4089,8 @@ async function registerRoutes(app2) {
       }
     });
   });
-  app2.get("/api/stores", async (req, res, next) => {
-    if (process.env.DEFAULT_SHOP_DOMAIN && !req.user && !req.shopifyUser) {
+  app2.get("/api/stores", async (req2, res, next) => {
+    if (process.env.DEFAULT_SHOP_DOMAIN && !req2.user && !req2.shopifyUser) {
       try {
         const shopDomain = process.env.DEFAULT_SHOP_DOMAIN;
         const userId = `shopify_${shopDomain.replace(".myshopify.com", "")}`;
@@ -3639,9 +4101,9 @@ async function registerRoutes(app2) {
         return res.json([]);
       }
     }
-    authenticate(req, res, async () => {
+    authenticate(req2, res, async () => {
       try {
-        const userId = getUserId(req);
+        const userId = getUserId(req2);
         if (!userId) {
           return res.status(401).json({ message: "No user ID found" });
         }
@@ -3653,10 +4115,10 @@ async function registerRoutes(app2) {
       }
     });
   });
-  app2.post("/api/stores/manual-setup", async (req, res) => {
+  app2.post("/api/stores/manual-setup", async (req2, res) => {
     try {
       const shopDomain = process.env.DEFAULT_SHOP_DOMAIN;
-      const accessToken = req.body.accessToken || process.env.SHOPIFY_ACCESS_TOKEN || "";
+      const accessToken = req2.body.accessToken || process.env.SHOPIFY_ACCESS_TOKEN || "";
       if (!shopDomain) {
         return res.status(400).json({ message: "No shop domain configured" });
       }
@@ -3696,13 +4158,13 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to setup store manually" });
     }
   });
-  app2.post("/api/stores", authenticate, async (req, res) => {
+  app2.post("/api/stores", authenticate, async (req2, res) => {
     try {
-      const userId = getUserId(req);
+      const userId = getUserId(req2);
       if (!userId) {
         return res.status(401).json({ message: "No user ID found" });
       }
-      const storeData = insertStoreSchema.parse({ ...req.body, userId });
+      const storeData = insertStoreSchema.parse({ ...req2.body, userId });
       const store = await storage.createStore(storeData);
       try {
         await shopifyService.syncProducts(store);
@@ -3716,10 +4178,10 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to create store" });
     }
   });
-  app2.get("/api/stores/current/vendors", authenticateOrDemo, async (req, res) => {
+  app2.get("/api/stores/current/vendors", authenticateOrDemo, planEnforcement, async (req2, res) => {
     try {
-      const store = await getUserCurrentStore(req);
-      const { page, limit, sortBy, sortDirection, search, paginated } = req.query;
+      const store = await getUserCurrentStore(req2);
+      const { page, limit, sortBy, sortDirection, search, paginated } = req2.query;
       if (paginated === "true") {
         const paginationParams = {
           page: page ? parseInt(page) : 1,
@@ -3747,10 +4209,10 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to fetch vendors" });
     }
   });
-  app2.get("/api/stores/current/vendors/metrics", authenticateOrDemo, async (req, res) => {
+  app2.get("/api/stores/current/vendors/metrics", authenticateOrDemo, planEnforcement, async (req2, res) => {
     try {
-      const store = await getUserCurrentStore(req);
-      const { page, limit, sortBy, sortDirection, search } = req.query;
+      const store = await getUserCurrentStore(req2);
+      const { page, limit, sortBy, sortDirection, search } = req2.query;
       const paginationParams = {
         page: page ? parseInt(page) : 1,
         limit: limit ? parseInt(limit) : 50,
@@ -3758,21 +4220,25 @@ async function registerRoutes(app2) {
         sortDirection: sortDirection || "desc",
         search
       };
-      const result = await storage.getStoreVendorMetrics(store.id, paginationParams);
+      const result = await storage.getStoreVendorMetrics(store.id, {
+        ...paginationParams,
+        planRestrictions: req2.planRestrictions
+      });
       res.json(result);
     } catch (error) {
       console.error("Error fetching vendor metrics:", error);
       res.status(500).json({ message: "Failed to fetch vendor metrics" });
     }
   });
-  app2.get("/api/stores/current/vendors/export/csv", authenticateOrDemo, async (req, res) => {
+  app2.get("/api/stores/current/vendors/export/csv", authenticateOrDemo, planEnforcement, async (req2, res) => {
     try {
-      const store = await getUserCurrentStore(req);
-      const { search, sortBy, sortDirection, dateRange } = req.query;
+      const store = await getUserCurrentStore(req2);
+      const { search, sortBy, sortDirection, dateRange, vendorId } = req2.query;
       const exportParams = {
         sortBy: sortBy || "revenue",
         sortDirection: sortDirection || "desc",
-        search
+        search,
+        vendorId
       };
       const filename = `vendor-analytics-${dateRange || "all"}-${(/* @__PURE__ */ new Date()).toISOString().split("T")[0]}.csv`;
       res.setHeader("Content-Type", "text/csv");
@@ -3786,14 +4252,15 @@ async function registerRoutes(app2) {
       }
     }
   });
-  app2.get("/api/stores/current/vendors/export/excel", authenticateOrDemo, async (req, res) => {
+  app2.get("/api/stores/current/vendors/export/excel", authenticateOrDemo, planEnforcement, async (req2, res) => {
     try {
-      const store = await getUserCurrentStore(req);
-      const { search, sortBy, sortDirection, dateRange } = req.query;
+      const store = await getUserCurrentStore(req2);
+      const { search, sortBy, sortDirection, dateRange, vendorId } = req2.query;
       const exportParams = {
         sortBy: sortBy || "revenue",
         sortDirection: sortDirection || "desc",
-        search
+        search,
+        vendorId
       };
       const filename = `vendor-analytics-${dateRange || "all"}-${(/* @__PURE__ */ new Date()).toISOString().split("T")[0]}.xlsx`;
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -3807,9 +4274,9 @@ async function registerRoutes(app2) {
       }
     }
   });
-  app2.get("/api/stores/current/exports/:jobId/status", authenticateOrDemo, async (req, res) => {
+  app2.get("/api/stores/current/exports/:jobId/status", authenticateOrDemo, async (req2, res) => {
     try {
-      const { jobId } = req.params;
+      const { jobId } = req2.params;
       res.json({
         jobId,
         status: "completed",
@@ -3821,10 +4288,10 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to check export status" });
     }
   });
-  app2.get("/api/stores/current/analytics/summary", authenticateOrDemo, async (req, res) => {
+  app2.get("/api/stores/current/analytics/summary", authenticateOrDemo, planEnforcement, async (req2, res) => {
     try {
-      const store = await getUserCurrentStore(req);
-      const { vendorId, startDate, endDate } = req.query;
+      const store = await getUserCurrentStore(req2);
+      const { vendorId, startDate, endDate } = req2.query;
       const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1e3);
       const end = endDate ? new Date(endDate) : /* @__PURE__ */ new Date();
       const cacheKey = CacheKeyBuilder.vendorSummary(store.id, vendorId, start, end);
@@ -3848,10 +4315,10 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to fetch analytics summary" });
     }
   });
-  app2.get("/api/stores/current/products/top", authenticateOrDemo, async (req, res) => {
+  app2.get("/api/stores/current/products/top", authenticateOrDemo, planEnforcement, async (req2, res) => {
     try {
-      const store = await getUserCurrentStore(req);
-      const { vendorId, limit, page, sortBy, sortDirection, paginated } = req.query;
+      const store = await getUserCurrentStore(req2);
+      const { vendorId, limit, page, sortBy, sortDirection, paginated } = req2.query;
       if (paginated === "true") {
         const paginationParams = {
           page: page ? parseInt(page) : 1,
@@ -3884,10 +4351,10 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to fetch top products" });
     }
   });
-  app2.get("/api/stores/current/products", authenticateOrDemo, async (req, res) => {
+  app2.get("/api/stores/current/products", authenticateOrDemo, async (req2, res) => {
     try {
-      const store = await getUserCurrentStore(req);
-      const { page, limit, sortBy, sortDirection, search } = req.query;
+      const store = await getUserCurrentStore(req2);
+      const { page, limit, sortBy, sortDirection, search } = req2.query;
       const paginationParams = {
         page: page ? parseInt(page) : 1,
         limit: limit ? parseInt(limit) : 50,
@@ -3902,10 +4369,10 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to fetch products" });
     }
   });
-  app2.get("/api/stores/current/analytics/paginated", authenticateOrDemo, async (req, res) => {
+  app2.get("/api/stores/current/analytics/paginated", authenticateOrDemo, planEnforcement, async (req2, res) => {
     try {
-      const store = await getUserCurrentStore(req);
-      const { page, limit, sortBy, sortDirection, vendorId, startDate, endDate } = req.query;
+      const store = await getUserCurrentStore(req2);
+      const { page, limit, sortBy, sortDirection, vendorId, startDate, endDate } = req2.query;
       const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1e3);
       const end = endDate ? new Date(endDate) : /* @__PURE__ */ new Date();
       const paginationParams = {
@@ -3924,10 +4391,10 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to fetch analytics" });
     }
   });
-  app2.get("/api/stores/current/pages/top", authenticateOrDemo, async (req, res) => {
+  app2.get("/api/stores/current/pages/top", authenticateOrDemo, planEnforcement, async (req2, res) => {
     try {
-      const store = await getUserCurrentStore(req);
-      const { vendorId, limit } = req.query;
+      const store = await getUserCurrentStore(req2);
+      const { vendorId, limit } = req2.query;
       const limitNum = limit ? parseInt(limit) : 10;
       const cacheKey = CacheKeyBuilder.landingPages(store.id, vendorId, limitNum);
       let topPages = cacheService.getAnalytics(cacheKey);
@@ -3949,10 +4416,10 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to fetch top pages" });
     }
   });
-  app2.get("/api/stores/:storeId/vendors", authenticate, async (req, res) => {
+  app2.get("/api/stores/:storeId/vendors", authenticate, async (req2, res) => {
     try {
-      const { storeId } = req.params;
-      const { page, limit, sortBy, sortDirection, search, paginated } = req.query;
+      const { storeId } = req2.params;
+      const { page, limit, sortBy, sortDirection, search, paginated } = req2.query;
       if (paginated === "true") {
         const paginationParams = {
           page: page ? parseInt(page) : 1,
@@ -3977,10 +4444,10 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to fetch vendors" });
     }
   });
-  app2.get("/api/stores/:storeId/analytics", authenticate, async (req, res) => {
+  app2.get("/api/stores/:storeId/analytics", authenticate, async (req2, res) => {
     try {
-      const { storeId } = req.params;
-      const { vendorId, startDate, endDate } = req.query;
+      const { storeId } = req2.params;
+      const { vendorId, startDate, endDate } = req2.query;
       const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1e3);
       const end = endDate ? new Date(endDate) : /* @__PURE__ */ new Date();
       const cacheKey = CacheKeyBuilder.analytics(storeId, vendorId, start, end);
@@ -4001,10 +4468,10 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to fetch analytics" });
     }
   });
-  app2.get("/api/stores/:storeId/analytics/summary", authenticate, async (req, res) => {
+  app2.get("/api/stores/:storeId/analytics/summary", authenticate, async (req2, res) => {
     try {
-      const { storeId } = req.params;
-      const { vendorId, startDate, endDate } = req.query;
+      const { storeId } = req2.params;
+      const { vendorId, startDate, endDate } = req2.query;
       const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1e3);
       const end = endDate ? new Date(endDate) : /* @__PURE__ */ new Date();
       const cacheKey = CacheKeyBuilder.vendorSummary(storeId, vendorId, start, end);
@@ -4025,10 +4492,10 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to fetch analytics summary" });
     }
   });
-  app2.get("/api/stores/:storeId/products/top", authenticate, async (req, res) => {
+  app2.get("/api/stores/:storeId/products/top", authenticate, async (req2, res) => {
     try {
-      const { storeId } = req.params;
-      const { vendorId, limit } = req.query;
+      const { storeId } = req2.params;
+      const { vendorId, limit } = req2.query;
       const limitNum = limit ? parseInt(limit) : 10;
       const cacheKey = CacheKeyBuilder.topProducts(storeId, vendorId, limitNum);
       let topProducts = cacheService.getAnalytics(cacheKey);
@@ -4047,10 +4514,10 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to fetch top products" });
     }
   });
-  app2.get("/api/stores/:storeId/pages/top", authenticate, async (req, res) => {
+  app2.get("/api/stores/:storeId/pages/top", authenticate, async (req2, res) => {
     try {
-      const { storeId } = req.params;
-      const { vendorId, limit } = req.query;
+      const { storeId } = req2.params;
+      const { vendorId, limit } = req2.query;
       const limitNum = limit ? parseInt(limit) : 10;
       const cacheKey = CacheKeyBuilder.landingPages(storeId, vendorId, limitNum);
       let topPages = cacheService.getAnalytics(cacheKey);
@@ -4069,9 +4536,9 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to fetch top landing pages" });
     }
   });
-  app2.post("/api/stores/:storeId/sync", authenticate, async (req, res) => {
+  app2.post("/api/stores/:storeId/sync", authenticate, async (req2, res) => {
     try {
-      const { storeId } = req.params;
+      const { storeId } = req2.params;
       const store = await storage.getStore(storeId);
       if (!store) {
         return res.status(404).json({ message: "Store not found" });
@@ -4088,7 +4555,7 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to sync store" });
     }
   });
-  app2.get("/api/cache/metrics", authenticate, (req, res) => {
+  app2.get("/api/cache/metrics", authenticate, (req2, res) => {
     try {
       const metrics = cacheService.getMetrics();
       res.json({
@@ -4101,9 +4568,9 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to fetch cache metrics" });
     }
   });
-  app2.post("/api/cache/clear/:storeId", authenticate, (req, res) => {
+  app2.post("/api/cache/clear/:storeId", authenticate, (req2, res) => {
     try {
-      const { storeId } = req.params;
+      const { storeId } = req2.params;
       cacheService.invalidateStore(storeId);
       res.json({
         message: `Cache cleared for store ${storeId}`,
@@ -4115,22 +4582,49 @@ async function registerRoutes(app2) {
     }
   });
   if (useShopifyAuth) {
-    app2.get("/api/billing/status", authenticate, async (req, res) => {
+    app2.get("/api/billing/status", authenticateOrDemo, async (req2, res) => {
       try {
-        const session2 = req.shopifySession;
+        if (req2.isDemoMode || req2.user?.isDemoMode) {
+          return res.json({
+            isDemo: true,
+            hasActiveSubscription: true,
+            subscription: {
+              id: "demo_subscription",
+              name: "Demo",
+              status: "ACTIVE",
+              test: true,
+              trialDays: 0,
+              currentPeriodEnd: new Date(Date.now() + 365 * 24 * 60 * 60 * 1e3).toISOString(),
+              createdAt: (/* @__PURE__ */ new Date()).toISOString()
+            },
+            isInTrial: false,
+            planFeatures: {
+              vendorLimit: -1,
+              dataHistoryDays: 1825,
+              features: ["core-analytics", "advanced-analytics", "custom-reports", "csv-export", "excel-export"]
+            }
+          });
+        }
+        const session2 = res.locals.shopify?.session || req2.shopifySession;
         if (!session2) {
           return res.status(401).json({ message: "No Shopify session found" });
         }
         const subscriptionStatus = await checkActiveSubscription(session2);
-        res.json(subscriptionStatus);
+        const planName = subscriptionStatus.subscription?.name || "Starter";
+        const planFeatures = getPlanRestrictions(planName);
+        res.json({
+          ...subscriptionStatus,
+          isDemo: false,
+          planFeatures
+        });
       } catch (error) {
         console.error("Error checking subscription status:", error);
         res.status(500).json({ message: "Failed to check subscription status" });
       }
     });
-    app2.post("/api/billing/subscribe", authenticate, async (req, res) => {
+    app2.post("/api/billing/subscribe", authenticate, async (req2, res) => {
       try {
-        const session2 = req.shopifySession;
+        const session2 = res.locals.shopify?.session || req2.shopifySession;
         if (!session2) {
           return res.status(401).json({ message: "No Shopify session found" });
         }
@@ -4141,9 +4635,16 @@ async function registerRoutes(app2) {
             subscription: currentStatus.subscription
           });
         }
+        const validPlanNames = ["Starter", "Growth", "Scale"];
+        const planName = req2.body.planName || "Starter";
+        if (!validPlanNames.includes(planName)) {
+          return res.status(400).json({
+            message: "Invalid plan name. Must be one of: " + validPlanNames.join(", ")
+          });
+        }
         const { subscription, confirmationUrl } = await createBillingSubscription(
           session2,
-          req.body.planName || "BrandSight Premium"
+          planName
         );
         res.json({
           subscription,
@@ -4155,13 +4656,13 @@ async function registerRoutes(app2) {
         res.status(500).json({ message: "Failed to create subscription" });
       }
     });
-    app2.post("/api/billing/cancel", authenticate, async (req, res) => {
+    app2.post("/api/billing/cancel", authenticate, async (req2, res) => {
       try {
-        const session2 = req.shopifySession;
+        const session2 = res.locals.shopify?.session || req2.shopifySession;
         if (!session2) {
           return res.status(401).json({ message: "No Shopify session found" });
         }
-        const { subscriptionId } = req.body;
+        const { subscriptionId } = req2.body;
         if (!subscriptionId) {
           return res.status(400).json({ message: "Subscription ID required" });
         }
@@ -4175,13 +4676,40 @@ async function registerRoutes(app2) {
         res.status(500).json({ message: "Failed to cancel subscription" });
       }
     });
-    app2.get("/api/billing/callback", authenticate, async (req, res) => {
+    app2.get("/api/billing/callback", authenticate, async (req2, res) => {
       try {
-        const { charge_id } = req.query;
+        const { charge_id } = req2.query;
         res.redirect(`/?billing=success&charge_id=${charge_id}`);
       } catch (error) {
         console.error("Error in billing callback:", error);
         res.redirect("/?billing=error");
+      }
+    });
+  } else {
+    app2.get("/api/billing/status", authenticateOrDemo, async (req2, res) => {
+      try {
+        return res.json({
+          isDemo: true,
+          hasActiveSubscription: true,
+          subscription: {
+            id: "demo_subscription",
+            name: "Demo",
+            status: "ACTIVE",
+            test: true,
+            trialDays: 0,
+            currentPeriodEnd: new Date(Date.now() + 365 * 24 * 60 * 60 * 1e3).toISOString(),
+            createdAt: (/* @__PURE__ */ new Date()).toISOString()
+          },
+          isInTrial: false,
+          planFeatures: {
+            vendorLimit: -1,
+            dataHistoryDays: 1825,
+            features: ["core-analytics", "advanced-analytics", "custom-reports", "csv-export", "excel-export"]
+          }
+        });
+      } catch (error) {
+        console.error("Error checking billing status:", error);
+        res.status(500).json({ message: "Failed to check billing status" });
       }
     });
   }
@@ -4262,8 +4790,8 @@ async function setupVite(app2, server) {
     appType: "custom"
   });
   app2.use(vite.middlewares);
-  app2.use("*", async (req, res, next) => {
-    const url = req.originalUrl;
+  app2.use("*", async (req2, res, next) => {
+    const url = req2.originalUrl;
     try {
       const clientTemplate = path2.resolve(
         import.meta.dirname,
@@ -4301,33 +4829,17 @@ function serveStatic(app2) {
 import fs2 from "fs";
 import path3 from "path";
 var app = express3();
-app.use((req, res, next) => {
-  if (req.path === "/api/webhooks") {
+app.use((req2, res, next) => {
+  if (req2.path === "/api/webhooks") {
     next();
   } else {
-    express3.json()(req, res, next);
+    express3.json()(req2, res, next);
   }
 });
 app.use(express3.urlencoded({ extended: false }));
-app.use((req, res, next) => {
-  const shop = req.query.shop || req.headers["x-shopify-shop"] || process.env.DEFAULT_SHOP_DOMAIN;
-  if (shop) {
-    res.setHeader(
-      "Content-Security-Policy",
-      `frame-ancestors https://${shop} https://admin.shopify.com;`
-    );
-  } else {
-    res.setHeader(
-      "Content-Security-Policy",
-      `frame-ancestors 'self';`
-    );
-  }
-  res.removeHeader("X-Frame-Options");
-  next();
-});
-app.use((req, res, next) => {
+app.use((req2, res, next) => {
   const start = Date.now();
-  const path4 = req.path;
+  const path4 = req2.path;
   let capturedJsonResponse = void 0;
   const originalResJson = res.json;
   res.json = function(bodyJson, ...args) {
@@ -4337,7 +4849,7 @@ app.use((req, res, next) => {
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path4.startsWith("/api")) {
-      let logLine = `${req.method} ${path4} ${res.statusCode} in ${duration}ms`;
+      let logLine = `${req2.method} ${path4} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
@@ -4375,11 +4887,6 @@ if (app.get("env") === "development") {
       },
       environment: app.get("env")
     });
-  });
-}
-if (app.get("env") === "development") {
-  app.get("/", (_req, res) => {
-    res.status(200).json({ status: "ok", message: "Server is running in development" });
   });
 }
 (async () => {
