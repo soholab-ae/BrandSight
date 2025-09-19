@@ -518,10 +518,11 @@ export async function setupShopifyAuth(app: Express) {
   app.use((req, res, next) => {
     const shop = req.query.shop || req.headers['x-shopify-shop-domain'];
     
-    // Build frame-ancestors based on shop context
+    // Build frame-ancestors for Shopify embedded apps - always include required domains
     let frameAncestors = 'https://admin.shopify.com https://*.myshopify.com';
-    if (shop) {
-      frameAncestors = `https://${shop} https://admin.shopify.com`;
+    if (shop && typeof shop === 'string' && !shop.includes('*')) {
+      // Include specific shop domain while keeping the wildcard for compatibility
+      frameAncestors = `https://admin.shopify.com https://*.myshopify.com https://${shop}`;
     }
     
     // Comprehensive CSP policy that allows all necessary resources for embedded Shopify apps
@@ -693,18 +694,7 @@ export async function setupShopifyAuth(app: Express) {
   // Setup webhook endpoint using the shared implementation
   await setupWebhookEndpoint(app, shopifyInstance.config.webhooks.path);
   
-  // Ensure the app can be embedded
-  app.use((req, res, next) => {
-    // Add X-Frame-Options header for specific routes
-    const shop = req.query.shop || req.headers['x-shopify-shop-domain'];
-    
-    if (shop && !req.path.startsWith('/api/')) {
-      // Remove X-Frame-Options to allow embedding
-      res.removeHeader('X-Frame-Options');
-    }
-    
-    next();
-  });
+  // X-Frame-Options is already removed in the CSP middleware above, no additional handling needed
   
   // Protected routes middleware - but exclude auth routes
   app.use((req, res, next) => {
