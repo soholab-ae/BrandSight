@@ -3,6 +3,7 @@ import { MemorySessionStorage } from "@shopify/shopify-app-session-storage-memor
 import { ApiVersion } from "@shopify/shopify-api";
 import express, { type Express } from "express";
 import crypto from "crypto";
+import jwt from "jsonwebtoken";
 import { storage } from "./storage";
 import { TokenEncryption } from "./services/tokenEncryption";
 
@@ -36,7 +37,7 @@ function initializeShopify() {
   return shopify;
 }
 
-export { shopify, initializeShopify, upsertShopifyUser };
+export { shopify, initializeShopify, upsertShopifyUser, validateSessionToken };
 
 // Environment variables validation
 function validateShopifyConfig() {
@@ -51,6 +52,65 @@ function validateShopifyConfig() {
   
   if (missing.length > 0) {
     throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+  }
+}
+
+// Session token validation for App Bridge
+async function validateSessionToken(token: string): Promise<{ shop: string; user?: any; session?: any } | null> {
+  try {
+    if (!process.env.SHOPIFY_API_SECRET) {
+      console.error('[SESSION_TOKEN] SHOPIFY_API_SECRET not available for token validation');
+      return null;
+    }
+
+    // Decode and verify the JWT token using Shopify's API secret
+    const decoded = jwt.verify(token, process.env.SHOPIFY_API_SECRET) as any;
+    
+    console.log('[SESSION_TOKEN] Successfully decoded token for shop:', decoded.dest);
+    
+    if (!decoded.dest) {
+      console.error('[SESSION_TOKEN] No shop domain (dest) found in token');
+      return null;
+    }
+
+    // Extract shop domain from the token
+    const shop = decoded.dest.replace('https://', '');
+    
+    // Check if store exists and is active
+    const store = await storage.getStoreByDomain(shop);
+    if (!store || !store.isActive) {
+      console.error('[SESSION_TOKEN] Store not found or inactive:', shop);
+      return null;
+    }
+
+    // Get user associated with the store
+    const user = await storage.getUser(store.userId);
+    
+    // Create a session-like object for compatibility
+    const sessionLike = {
+      shop,
+      accessToken: store.accessToken,
+      onlineAccessInfo: user ? {
+        associated_user: {
+          id: user.id.replace('shopify_', ''),
+          email: user.email,
+          first_name: user.firstName,
+          last_name: user.lastName,
+          avatar: user.profileImageUrl
+        }
+      } : null
+    };
+
+    console.log('[SESSION_TOKEN] Successfully validated session token for shop:', shop);
+    
+    return {
+      shop,
+      user,
+      session: sessionLike
+    };
+  } catch (error) {
+    console.error('[SESSION_TOKEN] Token validation failed:', TokenEncryption.sanitizeForLogging(error));
+    return null;
   }
 }
 
@@ -105,14 +165,49 @@ async function upsertShopifyUser(session: any) {
   }
 }
 
-// Authentication middleware for Shopify
+// Enhanced authentication middleware for Shopify - supports both session tokens and cookie-based auth
 export const authenticateShopify = async (req: any, res: any, next: any) => {
   try {
+    console.log('[AUTH] Starting Shopify authentication check');
+    
+    // First, try to validate session token from Authorization header (App Bridge)
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+      console.log('[AUTH] Found Authorization header, attempting session token validation');
+      
+      const tokenValidation = await validateSessionToken(token);
+      if (tokenValidation) {
+        console.log('[AUTH] Session token validation successful for shop:', tokenValidation.shop);
+        
+        // Store/update user and shop data using the session-like object
+        await upsertShopifyUser(tokenValidation.session);
+        
+        // Attach session data to request (same format as cookie-based auth)
+        req.shopifySession = tokenValidation.session;
+        req.shopifyUser = {
+          id: tokenValidation.session.onlineAccessInfo?.associated_user?.id || tokenValidation.session.shop,
+          shop: tokenValidation.session.shop,
+          accessToken: tokenValidation.session.accessToken,
+        };
+        
+        console.log('[AUTH] Session token authentication completed successfully');
+        return next();
+      } else {
+        console.log('[AUTH] Session token validation failed, falling back to cookie-based auth');
+      }
+    }
+    
+    // Fallback to cookie-based authentication
+    console.log('[AUTH] Attempting cookie-based authentication');
     const session = res.locals.shopify?.session;
     
     if (!session || !session.accessToken) {
+      console.log('[AUTH] No valid session found in either token or cookie');
       return res.status(401).json({ message: "Unauthorized - No valid Shopify session" });
     }
+    
+    console.log('[AUTH] Cookie-based session found for shop:', session.shop);
     
     // Store/update user and shop data
     await upsertShopifyUser(session);
@@ -125,6 +220,7 @@ export const authenticateShopify = async (req: any, res: any, next: any) => {
       accessToken: session.accessToken,
     };
     
+    console.log('[AUTH] Cookie-based authentication completed successfully');
     next();
   } catch (error) {
     console.error("Shopify authentication error:", TokenEncryption.sanitizeForLogging(error));

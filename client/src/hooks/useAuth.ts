@@ -97,7 +97,14 @@ export function useAuth() {
     queryKey: [authUrl], // Include parameters in query key for proper caching
     retry: false,
     queryFn: async () => {
-      const response = await fetch(authUrl);
+      // Use App Bridge authenticatedFetch if available and in embedded context
+      const fetchFn = (isEmbeddedContext && appBridgeContext?.authenticatedFetch) 
+        ? appBridgeContext.authenticatedFetch 
+        : fetch;
+      
+      console.log('[AUTH] Using fetch method:', isEmbeddedContext && appBridgeContext?.authenticatedFetch ? 'App Bridge authenticatedFetch' : 'regular fetch');
+      
+      const response = await fetchFn(authUrl);
       
       // Handle both 401 (unauthorized) and 302 (redirect to auth)
       if (response.status === 401 || response.status === 302) {
