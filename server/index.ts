@@ -1,6 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
+import { log } from "./vite";
 import { execSync } from "child_process";
 import fs from "fs";
 import path from "path";
@@ -108,9 +108,25 @@ if (app.get('env') === 'development') {
                        (app.get("env") === "development" && fs.existsSync(path.resolve(import.meta.dirname, '..', 'dist', 'public')));
   
   if (!isProduction) {
+    const { setupVite } = await import("./vite");
     await setupVite(app, server);
   } else {
-    serveStatic(app);
+    // Production static file serving (avoiding vite imports)
+    const distPath = path.resolve(import.meta.dirname, "..", "dist", "public");
+    
+    if (!fs.existsSync(distPath)) {
+      throw new Error(
+        `Could not find the build directory: ${distPath}, make sure to build the client first`,
+      );
+    }
+
+    app.use(express.static(distPath));
+
+    // fall through to index.html if the file doesn't exist
+    app.use("*", (_req, res) => {
+      res.sendFile(path.resolve(distPath, "index.html"));
+    });
+    
     log("Serving in production mode with static files");
   }
 
