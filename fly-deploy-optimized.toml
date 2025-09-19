@@ -1,0 +1,76 @@
+# Optimized fly.toml configuration for production deployment
+# This is an alternative configuration with production optimizations
+
+app = "brandsight"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "8080"
+  NPM_CONFIG_UPDATE_NOTIFIER = "false"
+  NPM_CONFIG_FUND = "false"
+  NODE_OPTIONS = "--max-old-space-size=512"
+
+# Optimized HTTP service configuration
+[[services]]
+  protocol = "tcp"
+  internal_port = 8080
+  processes = ["app"]
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["http", "tls"]
+
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 50
+    soft_limit = 40
+
+  # Optimized health check configuration
+  [[services.http_checks]]
+    interval = "15s"
+    timeout = "3s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/health"
+    protocol = "http"
+    restart_limit = 3
+    [services.http_checks.headers]
+      X-Forwarded-Proto = "https"
+
+# Optimized VM configuration for production
+[machines]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 1024  # Increased for better performance
+
+# Auto scaling configuration
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "suspend"  # Better than "stop" for faster wake-up
+  auto_start_machines = true
+  min_machines_running = 1
+  max_machines_running = 3  # Allow scaling for higher traffic
+  processes = ["app"]
+
+# Deploy configuration
+[deploy]
+  release_command = "echo 'Production deployment successful'"
+  strategy = "rolling"
+
+# Process configuration
+[processes]
+  app = "node dist/index.js"
+
+# Resource limits
+[experimental]
+  auto_rollback = true

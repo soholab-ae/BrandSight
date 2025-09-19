@@ -1,6 +1,6 @@
 name = "BrandSight"
 client_id = "${SHOPIFY_API_KEY}"
-application_url = "https://brandsight.replit.app"
+application_url = "https://your-app-name.fly.dev"
 embedded = true
 
 [access_scopes]
@@ -8,8 +8,8 @@ scopes = "read_products,read_orders,read_customers"
 
 [auth]
 redirect_urls = [
-  "https://brandsight.replit.app/api/auth/callback",
-  "https://brandsight.replit.app/api/auth/oauth/callback"
+  "https://your-app-name.fly.dev/api/auth/callback",
+  "https://your-app-name.fly.dev/api/auth/oauth/callback"
 ]
 
 [webhooks]
