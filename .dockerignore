@@ -1,0 +1,88 @@
+# Dependency directories
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs (except final dist)
+.next
+.nuxt
+.vite
+.cache
+
+# Development files
+.git
+.gitignore
+README.md
+*.md
+.env
+.env.local
+.env.development
+.env.test
+
+# Testing
+coverage
+.nyc_output
+__tests__
+test
+tests
+*.test.js
+*.test.ts
+*.spec.js
+*.spec.ts
+
+# IDE files
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# Temporary files
+tmp
+temp
+.tmp
+.temp
+
+# Development and build artifacts not needed in container
+client/src/**/*.test.ts
+client/src/**/*.test.tsx
+server/**/*.test.ts
+scripts/pre-build.js
+build.js
+deploy-check.js
+
+# Screenshots and documentation images
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+attached_assets
+
+# Documentation files
+DEPLOYMENT.md
+DEPLOYMENT_FIX.md
+SCREENSHOT_GUIDE.md
+SUBMISSION_CHECKLIST.md
+PRIVACY_POLICY.md
+TERMS_OF_SERVICE.md
+APP_LISTING.md
+SHOPIFY_CONFIGURATION_FIX.md
+
+# Replit specific files
+replit.md
+.replit
+replit.nix
