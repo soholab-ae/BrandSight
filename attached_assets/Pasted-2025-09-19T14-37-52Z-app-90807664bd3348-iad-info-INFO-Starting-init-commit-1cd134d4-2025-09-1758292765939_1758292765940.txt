@@ -1,0 +1,101 @@
+2025-09-19T14:37:52Z app[90807664bd3348] iad [info] INFO Starting init (commit: 1cd134d4)...
+2025-09-19T14:37:52Z app[90807664bd3348] iad [info] INFO Preparing to run: `dumb-init -- node dist/index.js` as nextjs
+2025-09-19T14:37:52Z app[90807664bd3348] iad [info] INFO [fly api proxy] listening at /.fly/api
+2025-09-19T14:37:52Z runner[90807664bd3348] iad [info]Machine started in 894ms
+2025-09-19T14:37:52Z app[90807664bd3348] iad [info]2025/09/19 14:37:52 INFO SSH listening listen_address=[fdaa:2d:7679:a7b:57d:2a8:e2e:2]:22
+2025-09-19T14:37:52Z app[90807664bd3348] iad [info]node:internal/modules/esm/resolve:873
+2025-09-19T14:37:52Z app[90807664bd3348] iad [info]  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+2025-09-19T14:37:52Z app[90807664bd3348] iad [info]        ^
+2025-09-19T14:37:52Z app[90807664bd3348] iad [info]Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'vite' imported from /app/dist/index.js
+2025-09-19T14:37:52Z app[90807664bd3348] iad [info]    at packageResolve (node:internal/modules/esm/resolve:873:9)
+2025-09-19T14:37:52Z app[90807664bd3348] iad [info]    at moduleResolve (node:internal/modules/esm/resolve:946:18)
+2025-09-19T14:37:52Z app[90807664bd3348] iad [info]    at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+2025-09-19T14:37:52Z app[90807664bd3348] iad [info]    at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:708:12)
+2025-09-19T14:37:52Z app[90807664bd3348] iad [info]    at #cachedDefaultResolve (node:internal/modules/esm/loader:657:25)
+2025-09-19T14:37:52Z app[90807664bd3348] iad [info]    at ModuleLoader.resolve (node:internal/modules/esm/loader:640:38)
+2025-09-19T14:37:52Z app[90807664bd3348] iad [info]    at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:264:38)
+2025-09-19T14:37:52Z app[90807664bd3348] iad [info]    at ModuleJob._link (node:internal/modules/esm/module_job:168:49) {
+2025-09-19T14:37:52Z app[90807664bd3348] iad [info]  code: 'ERR_MODULE_NOT_FOUND'
+2025-09-19T14:37:52Z app[90807664bd3348] iad [info]}
+2025-09-19T14:37:52Z app[90807664bd3348] iad [info]Node.js v20.19.5
+2025-09-19T14:37:53Z app[90807664bd3348] iad [info] INFO Main child exited normally with code: 1
+2025-09-19T14:37:53Z app[90807664bd3348] iad [info] INFO Starting clean up.
+2025-09-19T14:37:53Z app[90807664bd3348] iad [info][    1.724010] reboot: Restarting system
+2025-09-19T14:37:53Z app[90807664bd3348] iad [info]2025-09-19T14:37:53.902784212 [01K5H6ET1RFFG5KNJ4GWZYHRBY:main] Running Firecracker v1.12.1
+2025-09-19T14:37:53Z app[90807664bd3348] iad [info]2025-09-19T14:37:53.902917653 [01K5H6ET1RFFG5KNJ4GWZYHRBY:main] Listening on API socket ("/fc.sock").
+2025-09-19T14:37:54Z app[90807664bd3348] iad [info] INFO Starting init (commit: 1cd134d4)...
+2025-09-19T14:37:54Z app[90807664bd3348] iad [info] INFO Preparing to run: `dumb-init -- node dist/index.js` as nextjs
+2025-09-19T14:37:54Z app[90807664bd3348] iad [info] INFO [fly api proxy] listening at /.fly/api
+2025-09-19T14:37:54Z runner[90807664bd3348] iad [info]Machine started in 915ms
+2025-09-19T14:37:54Z app[90807664bd3348] iad [info]2025/09/19 14:37:54 INFO SSH listening listen_address=[fdaa:2d:7679:a7b:57d:2a8:e2e:2]:22
+2025-09-19T14:37:54Z app[90807664bd3348] iad [info]node:internal/modules/esm/resolve:873
+2025-09-19T14:37:54Z app[90807664bd3348] iad [info]  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+2025-09-19T14:37:54Z app[90807664bd3348] iad [info]        ^
+2025-09-19T14:37:54Z app[90807664bd3348] iad [info]Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'vite' imported from /app/dist/index.js
+2025-09-19T14:37:54Z app[90807664bd3348] iad [info]    at packageResolve (node:internal/modules/esm/resolve:873:9)
+2025-09-19T14:37:54Z app[90807664bd3348] iad [info]    at moduleResolve (node:internal/modules/esm/resolve:946:18)
+2025-09-19T14:37:54Z app[90807664bd3348] iad [info]    at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+2025-09-19T14:37:54Z app[90807664bd3348] iad [info]    at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:708:12)
+2025-09-19T14:37:54Z app[90807664bd3348] iad [info]    at #cachedDefaultResolve (node:internal/modules/esm/loader:657:25)
+2025-09-19T14:37:54Z app[90807664bd3348] iad [info]    at ModuleLoader.resolve (node:internal/modules/esm/loader:640:38)
+2025-09-19T14:37:54Z app[90807664bd3348] iad [info]    at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:264:38)
+2025-09-19T14:37:54Z app[90807664bd3348] iad [info]    at ModuleJob._link (node:internal/modules/esm/module_job:168:49) {
+2025-09-19T14:37:54Z app[90807664bd3348] iad [info]  code: 'ERR_MODULE_NOT_FOUND'
+2025-09-19T14:37:54Z app[90807664bd3348] iad [info]}
+2025-09-19T14:37:54Z app[90807664bd3348] iad [info]Node.js v20.19.5
+2025-09-19T14:37:55Z app[90807664bd3348] iad [info] INFO Main child exited normally with code: 1
+2025-09-19T14:37:55Z app[90807664bd3348] iad [info] INFO Starting clean up.
+2025-09-19T14:37:55Z app[90807664bd3348] iad [info][    1.728000] reboot: Restarting system
+2025-09-19T14:37:56Z app[90807664bd3348] iad [info]2025-09-19T14:37:56.249507204 [01K5H6ET1RFFG5KNJ4GWZYHRBY:main] Running Firecracker v1.12.1
+2025-09-19T14:37:56Z app[90807664bd3348] iad [info]2025-09-19T14:37:56.249650204 [01K5H6ET1RFFG5KNJ4GWZYHRBY:main] Listening on API socket ("/fc.sock").
+2025-09-19T14:37:56Z app[90807664bd3348] iad [info] INFO Starting init (commit: 1cd134d4)...
+2025-09-19T14:37:56Z app[90807664bd3348] iad [info] INFO Preparing to run: `dumb-init -- node dist/index.js` as nextjs
+2025-09-19T14:37:57Z app[90807664bd3348] iad [info] INFO [fly api proxy] listening at /.fly/api
+2025-09-19T14:37:57Z runner[90807664bd3348] iad [info]Machine started in 869ms
+2025-09-19T14:37:57Z app[90807664bd3348] iad [info]2025/09/19 14:37:57 INFO SSH listening listen_address=[fdaa:2d:7679:a7b:57d:2a8:e2e:2]:22
+2025-09-19T14:37:57Z app[90807664bd3348] iad [info]node:internal/modules/esm/resolve:873
+2025-09-19T14:37:57Z app[90807664bd3348] iad [info]  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+2025-09-19T14:37:57Z app[90807664bd3348] iad [info]        ^
+2025-09-19T14:37:57Z app[90807664bd3348] iad [info]Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'vite' imported from /app/dist/index.js
+2025-09-19T14:37:57Z app[90807664bd3348] iad [info]    at packageResolve (node:internal/modules/esm/resolve:873:9)
+2025-09-19T14:37:57Z app[90807664bd3348] iad [info]    at moduleResolve (node:internal/modules/esm/resolve:946:18)
+2025-09-19T14:37:57Z app[90807664bd3348] iad [info]    at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+2025-09-19T14:37:57Z app[90807664bd3348] iad [info]    at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:708:12)
+2025-09-19T14:37:57Z app[90807664bd3348] iad [info]    at #cachedDefaultResolve (node:internal/modules/esm/loader:657:25)
+2025-09-19T14:37:57Z app[90807664bd3348] iad [info]    at ModuleLoader.resolve (node:internal/modules/esm/loader:640:38)
+2025-09-19T14:37:57Z app[90807664bd3348] iad [info]    at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:264:38)
+2025-09-19T14:37:57Z app[90807664bd3348] iad [info]    at ModuleJob._link (node:internal/modules/esm/module_job:168:49) {
+2025-09-19T14:37:57Z app[90807664bd3348] iad [info]  code: 'ERR_MODULE_NOT_FOUND'
+2025-09-19T14:37:57Z app[90807664bd3348] iad [info]}
+2025-09-19T14:37:57Z app[90807664bd3348] iad [info]Node.js v20.19.5
+2025-09-19T14:37:58Z app[90807664bd3348] iad [info] INFO Main child exited normally with code: 1
+2025-09-19T14:37:58Z app[90807664bd3348] iad [info] INFO Starting clean up.
+2025-09-19T14:37:58Z app[90807664bd3348] iad [info][    1.716425] reboot: Restarting system
+2025-09-19T14:37:59Z app[90807664bd3348] iad [info]2025-09-19T14:37:59.199074719 [01K5H6ET1RFFG5KNJ4GWZYHRBY:main] Running Firecracker v1.12.1
+2025-09-19T14:37:59Z app[90807664bd3348] iad [info]2025-09-19T14:37:59.199194320 [01K5H6ET1RFFG5KNJ4GWZYHRBY:main] Listening on API socket ("/fc.sock").
+2025-09-19T14:37:59Z app[90807664bd3348] iad [info] INFO Starting init (commit: 1cd134d4)...
+2025-09-19T14:37:59Z app[90807664bd3348] iad [info] INFO Preparing to run: `dumb-init -- node dist/index.js` as nextjs
+2025-09-19T14:37:59Z app[90807664bd3348] iad [info] INFO [fly api proxy] listening at /.fly/api
+2025-09-19T14:38:00Z runner[90807664bd3348] iad [info]Machine started in 897ms
+2025-09-19T14:38:00Z app[90807664bd3348] iad [info]2025/09/19 14:38:00 INFO SSH listening listen_address=[fdaa:2d:7679:a7b:57d:2a8:e2e:2]:22
+2025-09-19T14:38:00Z app[90807664bd3348] iad [info]node:internal/modules/esm/resolve:873
+2025-09-19T14:38:00Z app[90807664bd3348] iad [info]  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+2025-09-19T14:38:00Z app[90807664bd3348] iad [info]        ^
+2025-09-19T14:38:00Z app[90807664bd3348] iad [info]Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'vite' imported from /app/dist/index.js
+2025-09-19T14:38:00Z app[90807664bd3348] iad [info]    at packageResolve (node:internal/modules/esm/resolve:873:9)
+2025-09-19T14:38:00Z app[90807664bd3348] iad [info]    at moduleResolve (node:internal/modules/esm/resolve:946:18)
+2025-09-19T14:38:00Z app[90807664bd3348] iad [info]    at defaultResolve (node:internal/modules/esm/resolve:1188:11)
+2025-09-19T14:38:00Z app[90807664bd3348] iad [info]    at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:708:12)
+2025-09-19T14:38:00Z app[90807664bd3348] iad [info]    at #cachedDefaultResolve (node:internal/modules/esm/loader:657:25)
+2025-09-19T14:38:00Z app[90807664bd3348] iad [info]    at ModuleLoader.resolve (node:internal/modules/esm/loader:640:38)
+2025-09-19T14:38:00Z app[90807664bd3348] iad [info]    at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:264:38)
+2025-09-19T14:38:00Z app[90807664bd3348] iad [info]    at ModuleJob._link (node:internal/modules/esm/module_job:168:49) {
+2025-09-19T14:38:00Z app[90807664bd3348] iad [info]  code: 'ERR_MODULE_NOT_FOUND'
+2025-09-19T14:38:00Z app[90807664bd3348] iad [info]}
+2025-09-19T14:38:00Z app[90807664bd3348] iad [info]Node.js v20.19.5
+2025-09-19T14:38:00Z app[90807664bd3348] iad [info] INFO Main child exited normally with code: 1
+2025-09-19T14:38:00Z app[90807664bd3348] iad [info] INFO Starting clean up.
+2025-09-19T14:38:00Z app[90807664bd3348] iad [info][    1.730194] reboot: Restarting system
+2025-09-19T14:38:02Z app[90807664bd3348] iad [info]2025-09-19T14:38:02.367722989 [01K5H6ET1RFFG5KNJ4GWZYHRBY:main] Running Firecracker v1.12.1
+2025-09-19T14:38:02Z app[90807664bd3348] iad [info]2025-09-19T14:38:02.367871610 [01K5H6ET1RFFG5KNJ4GWZYHRBY:main] Listening on API socket ("/fc.sock").
+
