@@ -2,6 +2,15 @@ import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 
 export function useAuth() {
+  // Try to use AppBridge context if available, otherwise fall back to manual detection
+  let appBridgeContext = null;
+  try {
+    // Import AppBridge context dynamically to avoid dependency issues
+    const { useAppBridge } = require("@/contexts/AppBridgeContext");
+    appBridgeContext = useAppBridge();
+  } catch (error) {
+    console.log("[AUTH] AppBridge context not available, using fallback detection");
+  }
 
   // Enhanced parameter extraction for embedded contexts
   const getUrlParams = () => {
@@ -9,15 +18,28 @@ export function useAuth() {
     let shop = urlParams.get('shop');
     let host = urlParams.get('host');
     
-    // Check for embedded context indicators
-    const isEmbeddedContext = window.location !== window.parent.location ||
-                              document.referrer?.includes('admin.shopify.com') ||
-                              urlParams.get('embedded') === '1';
+    // Use AppBridge context if available, otherwise fallback to manual detection
+    let isEmbeddedContext = false;
+    if (appBridgeContext) {
+      isEmbeddedContext = appBridgeContext.isEmbedded;
+      shop = shop || appBridgeContext.shop;
+      host = host || appBridgeContext.host;
+      console.log('[AUTH] Using AppBridge context:', { 
+        isEmbedded: appBridgeContext.isEmbedded, 
+        shop: appBridgeContext.shop, 
+        host: appBridgeContext.host 
+      });
+    } else {
+      // Fallback to manual embedded context detection
+      isEmbeddedContext = window.location !== window.parent.location ||
+                         document.referrer?.includes('admin.shopify.com') ||
+                         urlParams.get('embedded') === '1';
+    }
     
     console.log('[AUTH] URL parameters:', { shop, host, isEmbeddedContext });
     
     // If we don't have shop/host but we're in embedded context, try other methods
-    if ((!shop || !host) && isEmbeddedContext) {
+    if ((!shop || !host) && isEmbeddedContext && !appBridgeContext) {
       // Try to extract from referrer
       try {
         if (document.referrer && document.referrer.includes('admin.shopify.com')) {
@@ -41,8 +63,6 @@ export function useAuth() {
       } catch (error) {
         console.log('[AUTH] Failed to extract from referrer:', error);
       }
-      
-      // Note: Removed parent postMessage flow as Shopify admin doesn't emit SHOPIFY_PARAMS_RESPONSE messages
     }
     
     return { shop, host, isEmbeddedContext };

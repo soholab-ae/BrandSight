@@ -4,6 +4,7 @@ import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
+import { useAppBridge } from "@/contexts/AppBridgeContext";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import Setup from "@/pages/setup";
@@ -18,26 +19,19 @@ import Billing from "@/pages/billing";
 
 function OnboardingRouter() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-  
-  // Check if we're in embedded Shopify context
-  const urlParams = new URLSearchParams(window.location.search);
-  const shop = urlParams.get('shop');
-  const host = urlParams.get('host');
-  const isEmbeddedContext = shop || host || 
-    window.location.pathname.startsWith('/dashboard') ||
-    document.referrer?.includes('admin.shopify.com');
+  const { isEmbedded, shop, host } = useAppBridge();
 
   // For embedded apps, skip store fetching and go directly to dashboard when authenticated
   // For non-embedded apps, fetch stores to determine onboarding state
   const { data: stores, isLoading: storesLoading } = useQuery({
     queryKey: ['/api/stores'],
-    enabled: isAuthenticated && !isEmbeddedContext, // Skip for embedded apps
+    enabled: isAuthenticated && !isEmbedded, // Skip for embedded apps
     retry: 1
   });
 
   // Show loading state while checking authentication
   // For embedded apps, only wait for auth, not stores
-  if (authLoading || (isAuthenticated && !isEmbeddedContext && storesLoading)) {
+  if (authLoading || (isAuthenticated && !isEmbedded && storesLoading)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center" data-testid="loading-screen">
         <div className="text-center">
@@ -68,8 +62,8 @@ function OnboardingRouter() {
   return (
     <Switch>
       {/* For non-embedded apps, allow direct access to onboarding pages */}
-      {!isEmbeddedContext && <Route path="/setup" component={Setup} />}
-      {!isEmbeddedContext && <Route path="/sync" component={Sync} />}
+      {!isEmbedded && <Route path="/setup" component={Setup} />}
+      {!isEmbedded && <Route path="/sync" component={Sync} />}
       
       {/* Main dashboard and analytics pages - accessible for all authenticated users */}
       <Route path="/" component={Dashboard} />
