@@ -83,7 +83,7 @@ export default function VendorPerformance() {
   });
 
   // Export functionality for vendor contribution data
-  const exportVendorContribution = (format: 'csv' | 'excel') => {
+  const exportVendorContribution = (exportFormat: 'csv' | 'excel') => {
     if (!vendors) return;
 
     const totalRevenue = vendors.reduce((sum, v) => sum + v.totalRevenue, 0);
@@ -100,7 +100,7 @@ export default function VendorPerformance() {
       ? `${format(dateRange.from, 'yyyy-MM-dd')}_to_${format(dateRange.to, 'yyyy-MM-dd')}`
       : 'all_time';
 
-    if (format === 'csv') {
+    if (exportFormat === 'csv') {
       const csvContent = [
         ['Rank', 'Vendor', 'Revenue ($)', 'Percentage (%)', 'Product Count', 'Order Count'],
         ...exportData.map(row => [
@@ -122,7 +122,7 @@ export default function VendorPerformance() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-    } else if (format === 'excel') {
+    } else if (exportFormat === 'excel') {
       // Basic Excel export functionality (would need xlsx library for full functionality)
       const csvContent = [
         ['Rank', 'Vendor', 'Revenue ($)', 'Percentage (%)', 'Product Count', 'Order Count'],

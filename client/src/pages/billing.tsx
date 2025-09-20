@@ -12,6 +12,23 @@ import { queryClient } from "@/lib/queryClient";
 import { CheckCircle, Sparkles, Clock, CreditCard, XCircle, Star, Zap, Shield, Download, Calendar, AlertTriangle, DollarSign } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
+// Type definitions for billing status
+interface BillingSubscription {
+  id: string;
+  name: string;
+  status: string;
+  test: boolean;
+  trialDays: number;
+  currentPeriodEnd: string;
+  createdAt: string;
+}
+
+interface BillingStatus {
+  hasActiveSubscription: boolean;
+  subscription: BillingSubscription | null;
+  isInTrial: boolean;
+}
+
 export default function Billing() {
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
@@ -22,7 +39,7 @@ export default function Billing() {
   const isShopifyMode = import.meta.env.VITE_USE_SHOPIFY_AUTH === 'true';
   
   // Fetch billing status
-  const { data: billingStatus, isLoading, error } = useQuery({
+  const { data: billingStatus, isLoading, error } = useQuery<BillingStatus>({
     queryKey: ['/api/billing/status'],
     enabled: isShopifyMode && isAuthenticated,
     retry: 1,
@@ -237,7 +254,7 @@ export default function Billing() {
                           Unable to load billing information. Please try again later.
                         </AlertDescription>
                       </Alert>
-                    ) : (billingStatus as any)?.hasActiveSubscription ? (
+                    ) : billingStatus?.hasActiveSubscription ? (
                       /* Active Subscription */
                       <div className="space-y-6">
                         <div className="flex items-center justify-between">
@@ -263,8 +280,8 @@ export default function Billing() {
                           <div className="space-y-2">
                             <p className="text-sm font-medium text-gray-700">Next Billing Date</p>
                             <p className="text-sm text-gray-900" data-testid="next-billing-date">
-                              {(billingStatus as any)?.subscription?.currentPeriodEnd 
-                                ? new Date((billingStatus as any).subscription.currentPeriodEnd).toLocaleDateString('en-US', {
+                              {billingStatus?.subscription?.currentPeriodEnd 
+                                ? new Date(billingStatus.subscription.currentPeriodEnd).toLocaleDateString('en-US', {
                                     year: 'numeric',
                                     month: 'long', 
                                     day: 'numeric'
@@ -276,17 +293,17 @@ export default function Billing() {
                           <div className="space-y-2">
                             <p className="text-sm font-medium text-gray-700">Status</p>
                             <p className="text-sm text-gray-900">
-                              {(billingStatus as any)?.isInTrial ? 'Free Trial Active' : 'Subscription Active'}
+                              {billingStatus?.isInTrial ? 'Free Trial Active' : 'Subscription Active'}
                             </p>
                           </div>
                         </div>
 
-                        {(billingStatus as any)?.isInTrial && (
+                        {billingStatus?.isInTrial && (
                           <Alert>
                             <Clock className="h-4 w-4" />
                             <AlertDescription>
                               Your free trial ends on{' '}
-                              {new Date((billingStatus as any)?.subscription?.currentPeriodEnd).toLocaleDateString()}.
+                              {billingStatus.subscription?.currentPeriodEnd ? new Date(billingStatus.subscription.currentPeriodEnd).toLocaleDateString() : 'N/A'}.
                               You'll be automatically charged ${plans.find(p => p.name === currentPlan)?.price || 0}.00 through Shopify unless you cancel before then.
                             </AlertDescription>
                           </Alert>
@@ -316,7 +333,7 @@ export default function Billing() {
                               <AlertDialogFooter>
                                 <AlertDialogCancel>Keep Subscription</AlertDialogCancel>
                                 <AlertDialogAction
-                                  onClick={() => billingStatus.subscription?.id && handleCancelSubscription(billingStatus.subscription.id)}
+                                  onClick={() => billingStatus?.subscription?.id && handleCancelSubscription(billingStatus.subscription.id)}
                                   disabled={cancelMutation.isPending}
                                   className="bg-red-600 hover:bg-red-700"
                                 >

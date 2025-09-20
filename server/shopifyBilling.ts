@@ -1,7 +1,27 @@
 import { BillingInterval, BillingReplacementBehavior } from '@shopify/shopify-api';
 
+// Type definitions
+export type PlanName = 'Starter' | 'Growth' | 'Scale';
+
+type PlanFeatures = {
+  vendorLimit: number;
+  dataHistoryDays: number;
+  features: string[];
+  displayFeatures: string[];
+};
+
+type BillingConfig = {
+  amount: number;
+  currencyCode: string;
+  interval: BillingInterval;
+  trialDays: number;
+  replacementBehavior: BillingReplacementBehavior;
+  test: boolean;
+  features: PlanFeatures;
+};
+
 // Plan features configuration
-export const PLAN_FEATURES = {
+export const PLAN_FEATURES: Record<PlanName, PlanFeatures> = {
   "Starter": {
     vendorLimit: 10,
     dataHistoryDays: 90,
@@ -43,7 +63,7 @@ export const PLAN_FEATURES = {
 };
 
 // Billing configuration for the Shopify app
-export const BILLING_CONFIG = {
+export const BILLING_CONFIG: Record<PlanName, BillingConfig> = {
   "Starter": {
     amount: 49.00,
     currencyCode: "USD",
@@ -75,7 +95,7 @@ export const BILLING_CONFIG = {
 
 // Get available plans
 export function getAvailablePlans() {
-  return Object.keys(BILLING_CONFIG).map(planName => ({
+  return (Object.keys(BILLING_CONFIG) as PlanName[]).map(planName => ({
     name: planName,
     amount: BILLING_CONFIG[planName].amount,
     currencyCode: BILLING_CONFIG[planName].currencyCode,
@@ -86,7 +106,10 @@ export function getAvailablePlans() {
 
 // Check if a plan has a specific feature
 export function planHasFeature(planName: string, feature: string): boolean {
-  const plan = BILLING_CONFIG[planName];
+  if (!(planName in BILLING_CONFIG)) {
+    return false;
+  }
+  const plan = BILLING_CONFIG[planName as PlanName];
   if (!plan || !plan.features || !plan.features.features) {
     return false;
   }
@@ -95,7 +118,10 @@ export function planHasFeature(planName: string, feature: string): boolean {
 
 // Get plan restrictions
 export function getPlanRestrictions(planName: string) {
-  const plan = BILLING_CONFIG[planName];
+  if (!(planName in BILLING_CONFIG)) {
+    return null;
+  }
+  const plan = BILLING_CONFIG[planName as PlanName];
   if (!plan) return null;
   
   return {
@@ -136,7 +162,7 @@ export async function getStorePlanRestrictions(storeId: string) {
     }
 
     // Get plan features and restrictions
-    const planFeatures = PLAN_FEATURES[userPlan] || PLAN_FEATURES.Starter;
+    const planFeatures = (userPlan in PLAN_FEATURES) ? PLAN_FEATURES[userPlan as PlanName] : PLAN_FEATURES.Starter;
     
     return {
       planName: userPlan,
@@ -217,7 +243,7 @@ export function createPlanEnforcementMiddleware() {
       }
 
       // Get plan features and restrictions
-      const planFeatures = PLAN_FEATURES[userPlan] || PLAN_FEATURES.Starter;
+      const planFeatures = (userPlan in PLAN_FEATURES) ? PLAN_FEATURES[userPlan as PlanName] : PLAN_FEATURES.Starter;
       
       // Create plan restrictions object
       req.planRestrictions = {
@@ -273,7 +299,8 @@ export function createPlanEnforcementMiddleware() {
             const currentVendors = await storage.getStoreVendors(storeId);
             
             // For POST operations, check if we can add a new vendor
-            if (method === 'POST' && !planFeatures.canAddVendor(currentVendors.length)) {
+            const canAddVendor = planFeatures.vendorLimit === -1 || currentVendors.length < planFeatures.vendorLimit;
+            if (method === 'POST' && !canAddVendor) {
               return res.status(403).json({
                 message: `Vendor limit exceeded. Your ${userPlan} plan allows up to ${planFeatures.vendorLimit} vendors.`,
                 currentCount: currentVendors.length,
@@ -313,10 +340,10 @@ export async function createBillingSubscription(
   planName: string = "Starter"
 ) {
   try {
-    const plan = BILLING_CONFIG[planName];
-    if (!plan) {
+    if (!(planName in BILLING_CONFIG)) {
       throw new Error(`Billing plan ${planName} not found`);
     }
+    const plan = BILLING_CONFIG[planName as PlanName];
 
     // Use Shopify's billing API to create subscription
     const client = new (await import('@shopify/shopify-api')).GraphqlClient({
