@@ -3,8 +3,9 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { shopifyService } from "./services/shopifyService";
-import { insertStoreSchema } from "@shared/schema";
+import { insertStoreSchema, insertAlertSchema, insertAlertRuleSchema } from "@shared/schema";
 import { createBillingSubscription, checkActiveSubscription, cancelSubscription, createPlanEnforcementMiddleware, getPlanRestrictions } from "./shopifyBilling";
+import { AlertService } from "./services/alertService";
 import { cacheService, CacheKeyBuilder } from "./services/cacheService";
 import * as csv from 'fast-csv';
 import * as XLSX from 'xlsx';
@@ -1286,6 +1287,227 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error clearing cache:", error);
       res.status(500).json({ message: "Failed to clear cache" });
+    }
+  });
+
+  // ============= SMART ALERTS API ENDPOINTS =============
+  
+  // Get alerts for current store with pagination and filtering
+  app.get('/api/alerts', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const { page, limit, isRead, severity, vendorId } = req.query;
+      
+      const params = {
+        page: page ? parseInt(page as string) : 1,
+        limit: limit ? parseInt(limit as string) : 50,
+        isRead: isRead === 'true' ? true : isRead === 'false' ? false : undefined,
+        severity: severity as string,
+        vendorId: vendorId as string
+      };
+      
+      const alerts = await storage.getStoreAlerts(store.id, params);
+      res.json(alerts);
+    } catch (error) {
+      console.error("Error fetching alerts:", error);
+      if (error instanceof Error && error.message === "No stores found for user") {
+        return res.status(404).json({ message: "No stores found for user" });
+      }
+      res.status(500).json({ message: "Failed to fetch alerts" });
+    }
+  });
+
+  // Mark alert as read
+  app.post('/api/alerts/:id/read', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const store = await getUserCurrentStore(req);
+      
+      // Use store-scoped operation to prevent IDOR
+      const updatedAlert = await storage.markAlertAsRead(store.id, id);
+      res.json(updatedAlert);
+    } catch (error) {
+      console.error("Error marking alert as read:", error);
+      res.status(500).json({ message: "Failed to mark alert as read" });
+    }
+  });
+
+  // Acknowledge alert
+  app.post('/api/alerts/:id/acknowledge', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const store = await getUserCurrentStore(req);
+      
+      // Use store-scoped operation to prevent IDOR
+      const updatedAlert = await storage.acknowledgeAlert(store.id, id);
+      res.json(updatedAlert);
+    } catch (error) {
+      console.error("Error acknowledging alert:", error);
+      res.status(500).json({ message: "Failed to acknowledge alert" });
+    }
+  });
+
+  // Delete alert
+  app.delete('/api/alerts/:id', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const store = await getUserCurrentStore(req);
+      
+      // Use store-scoped operation to prevent IDOR
+      await storage.deleteAlert(store.id, id);
+      res.json({ message: "Alert deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting alert:", error);
+      res.status(500).json({ message: "Failed to delete alert" });
+    }
+  });
+
+  // Process alerts manually (for testing/immediate check)
+  app.post('/api/alerts/process', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const userId = getUserId(req);
+      const { vendorId } = req.body;
+      
+      // Support optional vendorId parameter for targeted processing
+      const newAlerts = await AlertService.processStoreAlerts(store.id, userId, vendorId);
+      res.json({ 
+        message: `Generated ${newAlerts.length} new alerts${vendorId ? ` for vendor ${vendorId}` : ''}`,
+        alerts: newAlerts 
+      });
+    } catch (error) {
+      console.error("Error processing alerts:", error);
+      res.status(500).json({ message: "Failed to process alerts" });
+    }
+  });
+
+  // Get alert statistics
+  app.get('/api/alerts/stats', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      
+      const stats = await AlertService.getAlertStats(store.id);
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching alert stats:", error);
+      res.status(500).json({ message: "Failed to fetch alert statistics" });
+    }
+  });
+
+  // ============= ALERT RULES API ENDPOINTS =============
+
+  // Get alert rules for store
+  app.get('/api/alert-rules', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const { page, limit } = req.query;
+      
+      const params = {
+        page: page ? parseInt(page as string) : 1,
+        limit: limit ? parseInt(limit as string) : 50
+      };
+      
+      const alertRules = await storage.getStoreAlertRules(store.id, params);
+      res.json(alertRules);
+    } catch (error) {
+      console.error("Error fetching alert rules:", error);
+      if (error instanceof Error && error.message === "No stores found for user") {
+        return res.status(404).json({ message: "No stores found for user" });
+      }
+      res.status(500).json({ message: "Failed to fetch alert rules" });
+    }
+  });
+
+  // Create new alert rule
+  app.post('/api/alert-rules', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      
+      // Validate request body
+      const validatedData = insertAlertRuleSchema.parse({
+        ...req.body,
+        storeId: store.id
+      });
+      
+      const newAlertRule = await storage.createAlertRule(validatedData);
+      res.status(201).json(newAlertRule);
+    } catch (error: any) {
+      console.error("Error creating alert rule:", error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ 
+          message: "Invalid alert rule data",
+          errors: error.errors 
+        });
+      }
+      res.status(500).json({ message: "Failed to create alert rule" });
+    }
+  });
+
+  // Update alert rule
+  app.put('/api/alert-rules/:id', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const store = await getUserCurrentStore(req);
+      
+      // Validate request body (partial update allowed)
+      const allowedUpdates = ['alertType', 'vendorId', 'thresholdType', 'thresholdValue', 'enabled'];
+      const updates: any = {};
+      
+      for (const field of allowedUpdates) {
+        if (req.body[field] !== undefined) {
+          updates[field] = req.body[field];
+        }
+      }
+      
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ message: "No valid fields to update" });
+      }
+      
+      // Use store-scoped operation to prevent IDOR
+      const updatedRule = await storage.updateAlertRule(store.id, id, updates);
+      res.json(updatedRule);
+    } catch (error) {
+      console.error("Error updating alert rule:", error);
+      res.status(500).json({ message: "Failed to update alert rule" });
+    }
+  });
+
+  // Delete alert rule
+  app.delete('/api/alert-rules/:id', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const store = await getUserCurrentStore(req);
+      
+      // Use store-scoped operation to prevent IDOR
+      await storage.deleteAlertRule(store.id, id);
+      res.json({ message: "Alert rule deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting alert rule:", error);
+      res.status(500).json({ message: "Failed to delete alert rule" });
+    }
+  });
+
+  // ============= VENDOR PERFORMANCE ANALYSIS ENDPOINTS =============
+
+  // Get vendor performance analysis
+  app.get('/api/alerts/performance-analysis', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const { vendorId } = req.query;
+      
+      const performanceMetrics = await AlertService.analyzeVendorPerformance(
+        store.id, 
+        vendorId as string
+      );
+      
+      res.json({
+        storeId: store.id,
+        analysisDate: new Date().toISOString(),
+        vendorMetrics: performanceMetrics
+      });
+    } catch (error) {
+      console.error("Error analyzing vendor performance:", error);
+      res.status(500).json({ message: "Failed to analyze vendor performance" });
     }
   });
 
