@@ -6,6 +6,7 @@ import { shopifyService } from "./services/shopifyService";
 import { insertStoreSchema, insertAlertSchema, insertAlertRuleSchema } from "@shared/schema";
 import { createBillingSubscription, checkActiveSubscription, cancelSubscription, createPlanEnforcementMiddleware, getPlanRestrictions } from "./shopifyBilling";
 import { AlertService } from "./services/alertService";
+import { BrandLoyaltyService } from "./services/brandLoyaltyService";
 import { cacheService, CacheKeyBuilder } from "./services/cacheService";
 import * as csv from 'fast-csv';
 import * as XLSX from 'xlsx';
@@ -261,7 +262,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!userId) {
       // If no user ID, return demo store for easy-access demo
       return {
-        id: "demo_store_1",
+        id: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7",
         userId: "demo_user",
         name: "Demo Store",
         domain: "demo-store.myshopify.com",
@@ -276,7 +277,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (stores.length === 0) {
       // Return demo store if user has no stores connected
       return {
-        id: "demo_store_1",
+        id: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7",
         userId: userId,
         name: "Demo Store",
         domain: "demo-store.myshopify.com",
@@ -1508,6 +1509,220 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error analyzing vendor performance:", error);
       res.status(500).json({ message: "Failed to analyze vendor performance" });
+    }
+  });
+
+  // ============= BRAND LOYALTY ANALYTICS ENDPOINTS =============
+
+  // Get customer brand affinity data with pagination and filtering
+  app.get('/api/brand-loyalty/affinity', authenticateOrDemo, planEnforcement, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const { 
+        page = 1, 
+        limit = 20, 
+        customerId, 
+        vendorId,
+        segment 
+      } = req.query;
+      
+      const result = await storage.getCustomerBrandAffinities(store.id, {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        customerId: customerId as string,
+        vendorId: vendorId as string
+      });
+      
+      // Filter by segment if provided
+      if (segment) {
+        const now = new Date();
+        result.data = result.data.filter(affinity => {
+          const daysSinceLast = affinity.lastPurchase 
+            ? (now.getTime() - affinity.lastPurchase.getTime()) / (1000 * 60 * 60 * 24)
+            : 365;
+          
+          const customerSegment = BrandLoyaltyService.determineCustomerSegment(
+            parseFloat(affinity.affinityScore),
+            parseFloat(affinity.totalSpent),
+            affinity.totalOrders,
+            daysSinceLast
+          );
+          
+          return customerSegment.segment === segment;
+        });
+      }
+      
+      res.json({
+        data: result.data,
+        pagination: result.pagination,
+        storeId: store.id
+      });
+    } catch (error) {
+      console.error("Error getting brand affinity data:", error);
+      res.status(500).json({ message: "Failed to get brand affinity data" });
+    }
+  });
+
+  // Get cross-brand purchase analysis
+  app.get('/api/brand-loyalty/cross-brand', authenticateOrDemo, planEnforcement, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const { vendorId } = req.query;
+      
+      const crossBrandInsights = await BrandLoyaltyService.analyzeCrossBrandPurchases(
+        store.id,
+        vendorId as string
+      );
+      
+      res.json({
+        insights: crossBrandInsights,
+        storeId: store.id,
+        analysisDate: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Error getting cross-brand analysis:", error);
+      res.status(500).json({ message: "Failed to get cross-brand analysis" });
+    }
+  });
+
+  // Get top customers by brand with loyalty scores
+  app.get('/api/brand-loyalty/top-customers', authenticateOrDemo, planEnforcement, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const { vendorId, limit = 50 } = req.query;
+      
+      if (!vendorId) {
+        return res.status(400).json({ message: "vendorId parameter is required" });
+      }
+      
+      const topCustomers = await storage.getTopCustomersByAffinity(
+        store.id, 
+        vendorId as string, 
+        parseInt(limit)
+      );
+      
+      // Enhance with customer segmentation and CLV
+      const now = new Date();
+      const enhancedCustomers = topCustomers.map(customer => {
+        const daysSinceLast = customer.lastPurchase 
+          ? (now.getTime() - customer.lastPurchase.getTime()) / (1000 * 60 * 60 * 24)
+          : 365;
+        
+        const daysSinceFirst = customer.firstPurchase
+          ? (now.getTime() - customer.firstPurchase.getTime()) / (1000 * 60 * 60 * 24)
+          : 1;
+        
+        const segment = BrandLoyaltyService.determineCustomerSegment(
+          parseFloat(customer.affinityScore),
+          parseFloat(customer.totalSpent),
+          customer.totalOrders,
+          daysSinceLast
+        );
+        
+        const clv = BrandLoyaltyService.calculateCLV(
+          parseFloat(customer.totalSpent),
+          customer.totalOrders,
+          daysSinceFirst,
+          daysSinceLast
+        );
+        
+        return {
+          ...customer,
+          customerSegment: segment.segment,
+          segmentDescription: segment.description,
+          estimatedCLV: clv,
+          daysSinceLastPurchase: Math.round(daysSinceLast)
+        };
+      });
+      
+      res.json({
+        customers: enhancedCustomers,
+        storeId: store.id,
+        vendorId: vendorId as string
+      });
+    } catch (error) {
+      console.error("Error getting top customers:", error);
+      res.status(500).json({ message: "Failed to get top customers" });
+    }
+  });
+
+  // Get brand loyalty insights and metrics
+  app.get('/api/brand-loyalty/insights', authenticateOrDemo, planEnforcement, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      
+      const [loyaltyInsights, clvByBrand] = await Promise.all([
+        BrandLoyaltyService.getLoyaltyInsights(store.id),
+        BrandLoyaltyService.getCLVByBrand(store.id)
+      ]);
+      
+      res.json({
+        loyaltyInsights,
+        clvByBrand,
+        storeId: store.id,
+        analysisDate: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Error getting loyalty insights:", error);
+      res.status(500).json({ message: "Failed to get loyalty insights" });
+    }
+  });
+
+  // Update affinity scores (for processing new orders)
+  app.post('/api/brand-loyalty/update', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const { customerId, vendorId, orderValue } = req.body;
+      
+      if (!customerId || !vendorId || orderValue === undefined) {
+        return res.status(400).json({ 
+          message: "customerId, vendorId, and orderValue are required" 
+        });
+      }
+      
+      const updatedAffinity = await BrandLoyaltyService.updateAffinityScores(
+        store.id,
+        customerId,
+        vendorId,
+        parseFloat(orderValue)
+      );
+      
+      res.json({
+        message: "Affinity scores updated successfully",
+        affinity: updatedAffinity,
+        storeId: store.id
+      });
+    } catch (error) {
+      console.error("Error updating affinity scores:", error);
+      res.status(500).json({ message: "Failed to update affinity scores" });
+    }
+  });
+
+  // Generate demo brand loyalty data (for testing/demo purposes)
+  // SECURITY: Explicit guard to ensure demo mode forces demo store only
+  app.post('/api/brand-loyalty/generate-demo', authenticateOrDemo, async (req: any, res) => {
+    try {
+      // SECURITY GUARD: Only allow demo data generation for demo stores
+      if (!req.isDemoMode && !req.user?.isDemoMode) {
+        const store = await getUserCurrentStore(req);
+        if (store.domain !== 'demo-store.myshopify.com') {
+          return res.status(403).json({ 
+            message: "Demo data generation is only allowed for demo stores" 
+          });
+        }
+      }
+      
+      const store = await getUserCurrentStore(req);
+      
+      await BrandLoyaltyService.generateDemoData(store.id);
+      
+      res.json({
+        message: "Demo brand loyalty data generated successfully",
+        storeId: store.id
+      });
+    } catch (error) {
+      console.error("Error generating demo data:", error);
+      res.status(500).json({ message: "Failed to generate demo data" });
     }
   });
 

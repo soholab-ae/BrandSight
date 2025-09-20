@@ -10,7 +10,7 @@ import type {
 
 // Demo store
 export const demoStore: Store = {
-  id: "demo_store_1",
+  id: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7",
   userId: "demo_user",
   name: "Demo Store",
   domain: "demo-store.myshopify.com",
@@ -28,35 +28,35 @@ export const demoStore: Store = {
 export const demoVendors: Vendor[] = [
   {
     id: "vendor_1",
-    storeId: "demo_store_1",
+    storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7",
     name: "Nike",
     slug: "nike",
     createdAt: new Date('2024-01-01')
   },
   {
     id: "vendor_2",
-    storeId: "demo_store_1",
+    storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7",
     name: "Adidas",
     slug: "adidas",
     createdAt: new Date('2024-01-01')
   },
   {
     id: "vendor_3",
-    storeId: "demo_store_1",
+    storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7",
     name: "Under Armour",
     slug: "under-armour",
     createdAt: new Date('2024-01-01')
   },
   {
     id: "vendor_4",
-    storeId: "demo_store_1",
+    storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7",
     name: "Puma",
     slug: "puma",
     createdAt: new Date('2024-01-01')
   },
   {
     id: "vendor_5",
-    storeId: "demo_store_1",
+    storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7",
     name: "New Balance",
     slug: "new-balance",
     createdAt: new Date('2024-01-01')
@@ -68,7 +68,7 @@ export const demoProducts: Product[] = [
   // Nike products
   {
     id: "prod_nike_1",
-    storeId: "demo_store_1",
+    storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7",
     vendorId: "vendor_1",
     title: "Nike Air Max 270",
     handle: "nike-air-max-270",
@@ -82,7 +82,7 @@ export const demoProducts: Product[] = [
   },
   {
     id: "prod_nike_2",
-    storeId: "demo_store_1",
+    storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7",
     vendorId: "vendor_1",
     title: "Nike Dri-FIT Training Shirt",
     handle: "nike-dri-fit-training-shirt",
@@ -96,7 +96,7 @@ export const demoProducts: Product[] = [
   },
   {
     id: "prod_nike_3",
-    storeId: "demo_store_1",
+    storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7",
     vendorId: "vendor_1",
     title: "Nike Pro Leggings",
     handle: "nike-pro-leggings",
@@ -111,7 +111,7 @@ export const demoProducts: Product[] = [
   // Adidas products
   {
     id: "prod_adidas_1",
-    storeId: "demo_store_1",
+    storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7",
     vendorId: "vendor_2",
     title: "Adidas Ultraboost 22",
     handle: "adidas-ultraboost-22",
@@ -125,7 +125,7 @@ export const demoProducts: Product[] = [
   },
   {
     id: "prod_adidas_2",
-    storeId: "demo_store_1",
+    storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7",
     vendorId: "vendor_2",
     title: "Adidas 3-Stripes Track Jacket",
     handle: "adidas-3-stripes-track-jacket",
@@ -140,7 +140,7 @@ export const demoProducts: Product[] = [
   // Under Armour products
   {
     id: "prod_ua_1",
-    storeId: "demo_store_1",
+    storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7",
     vendorId: "vendor_3",
     title: "Under Armour HOVR Phantom",
     handle: "under-armour-hovr-phantom",
@@ -154,7 +154,7 @@ export const demoProducts: Product[] = [
   },
   {
     id: "prod_ua_2",
-    storeId: "demo_store_1",
+    storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7",
     vendorId: "vendor_3",
     title: "Under Armour HeatGear Compression Shirt",
     handle: "under-armour-heatgear-compression",
@@ -169,7 +169,7 @@ export const demoProducts: Product[] = [
   // Puma products
   {
     id: "prod_puma_1",
-    storeId: "demo_store_1",
+    storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7",
     vendorId: "vendor_4",
     title: "Puma RS-X³",
     handle: "puma-rs-x3",
@@ -184,7 +184,7 @@ export const demoProducts: Product[] = [
   // New Balance products
   {
     id: "prod_nb_1",
-    storeId: "demo_store_1",
+    storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7",
     vendorId: "vendor_5",
     title: "New Balance 990v5",
     handle: "new-balance-990v5",
@@ -198,7 +198,7 @@ export const demoProducts: Product[] = [
   },
   {
     id: "prod_nb_2",
-    storeId: "demo_store_1",
+    storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7",
     vendorId: "vendor_5",
     title: "New Balance Fresh Foam 1080",
     handle: "new-balance-fresh-foam-1080",
@@ -263,7 +263,7 @@ function generateDemoOrders(): Order[] {
     
     orders.push({
       id: `order_${i + 1}`,
-      storeId: "demo_store_1",
+      storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7",
       orderNumber: `#${1000 + i}`,
       totalPrice: totalPrice.toFixed(2),
       subtotalPrice: subtotalPrice.toFixed(2),
