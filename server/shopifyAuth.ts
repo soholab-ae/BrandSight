@@ -815,6 +815,15 @@ export async function setupShopifyAuth(app: Express) {
       }
     }
     
+    // Always skip validation for demo-compatible endpoints that support demo mode
+    // SECURITY FIX: Remove brand-loyalty route exemption - these routes must use authenticateOrDemo
+    if (req.path.startsWith('/api/stores/current/') ||
+        req.path.startsWith('/api/alerts') ||
+        req.path.startsWith('/api/alert-rules') ||
+        req.path.startsWith('/api/cache/')) {
+      return next();
+    }
+    
     // Apply validation to other API routes only when we have proper shop context
     if (req.path.startsWith('/api/')) {
       // Extract shop from multiple sources before validating

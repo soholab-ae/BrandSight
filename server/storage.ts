@@ -288,7 +288,7 @@ export class DatabaseStorage implements IStorage {
   // Vendor operations
   async getStoreVendors(storeId: string): Promise<Vendor[]> {
     // Return demo vendors for demo store
-    if (storeId === 'demo_store_1') {
+    if (storeId === 'c15b4e68-ea15-4036-a5f7-cdce20d2baa7') {
       return demoVendors;
     }
     return await db.select().from(vendors).where(eq(vendors.storeId, storeId));
@@ -299,7 +299,7 @@ export class DatabaseStorage implements IStorage {
     const offset = (page - 1) * limit;
 
     // Return demo vendors for demo store with pagination
-    if (storeId === 'demo_store_1') {
+    if (storeId === 'c15b4e68-ea15-4036-a5f7-cdce20d2baa7') {
       let filteredVendors = [...demoVendors];
       
       if (search) {
@@ -380,7 +380,7 @@ export class DatabaseStorage implements IStorage {
     const offset = (page - 1) * limit;
 
     // Return demo vendor metrics for demo store with plan-based filtering
-    if (storeId === 'demo_store_1') {
+    if (storeId === 'c15b4e68-ea15-4036-a5f7-cdce20d2baa7') {
       // Apply plan-based data history filtering 
       const cutoffDate = planRestrictions?.dataHistoryDays 
         ? new Date(Date.now() - planRestrictions.dataHistoryDays * 24 * 60 * 60 * 1000)
@@ -615,7 +615,7 @@ export class DatabaseStorage implements IStorage {
     const offset = (page - 1) * limit;
 
     // Return demo products for demo store with pagination
-    if (storeId === 'demo_store_1') {
+    if (storeId === 'c15b4e68-ea15-4036-a5f7-cdce20d2baa7') {
       let filteredProducts = [...demoProducts];
       
       if (search) {
@@ -793,7 +793,7 @@ export class DatabaseStorage implements IStorage {
     const offset = (page - 1) * limit;
 
     // Return demo analytics for demo store with pagination
-    if (storeId === 'demo_store_1') {
+    if (storeId === 'c15b4e68-ea15-4036-a5f7-cdce20d2baa7') {
       let analytics = [...demoVendorAnalytics];
       
       if (vendorId) {
@@ -890,7 +890,7 @@ export class DatabaseStorage implements IStorage {
     endDate?: Date
   ): Promise<VendorAnalytics[]> {
     // Return demo analytics for demo store
-    if (storeId === 'demo_store_1') {
+    if (storeId === 'c15b4e68-ea15-4036-a5f7-cdce20d2baa7') {
       let analytics = demoVendorAnalytics;
       
       if (vendorId) {
@@ -937,7 +937,7 @@ export class DatabaseStorage implements IStorage {
     endDate?: Date
   ): Promise<any> {
     // Calculate summary from demo analytics for demo store
-    if (storeId === 'demo_store_1') {
+    if (storeId === 'c15b4e68-ea15-4036-a5f7-cdce20d2baa7') {
       let analytics = demoVendorAnalytics;
       
       if (vendorId) {
@@ -1016,7 +1016,7 @@ export class DatabaseStorage implements IStorage {
     const offset = (page - 1) * limit;
 
     // Calculate top products from demo data with pagination
-    if (storeId === 'demo_store_1') {
+    if (storeId === 'c15b4e68-ea15-4036-a5f7-cdce20d2baa7') {
       const productStats = new Map<string, any>();
       
       demoOrders.forEach(order => {
@@ -1121,7 +1121,7 @@ export class DatabaseStorage implements IStorage {
     limit: number = 10
   ): Promise<any[]> {
     // Calculate top products from demo data
-    if (storeId === 'demo_store_1') {
+    if (storeId === 'c15b4e68-ea15-4036-a5f7-cdce20d2baa7') {
       const productStats = new Map<string, any>();
       
       demoOrders.forEach(order => {
@@ -1486,18 +1486,29 @@ export class DatabaseStorage implements IStorage {
   // ============= CUSTOMER BRAND LOYALTY TRACKING =============
   
   async upsertCustomerBrandAffinity(affinity: InsertCustomerBrandAffinity): Promise<CustomerBrandAffinity> {
-    const [upsertedAffinity] = await db
+    // ATOMIC UPSERT: Use onConflictDoUpdate to prevent race conditions
+    // This relies on the unique composite index (store_id, customer_id, vendor_id)
+    const [result] = await db
       .insert(customerBrandAffinity)
       .values(affinity)
       .onConflictDoUpdate({
-        target: [customerBrandAffinity.storeId, customerBrandAffinity.customerId, customerBrandAffinity.vendorId],
+        target: [
+          customerBrandAffinity.storeId,
+          customerBrandAffinity.customerId,
+          customerBrandAffinity.vendorId
+        ],
         set: {
-          ...affinity,
+          affinityScore: affinity.affinityScore,
+          totalOrders: affinity.totalOrders,
+          totalSpent: affinity.totalSpent,
+          firstPurchase: affinity.firstPurchase,
+          lastPurchase: affinity.lastPurchase,
           updatedAt: new Date(),
-        },
+        }
       })
       .returning();
-    return upsertedAffinity;
+    
+    return result;
   }
 
   async getCustomerBrandAffinities(storeId: string, params?: PaginationParams & { customerId?: string; vendorId?: string }): Promise<PaginatedResponse<CustomerBrandAffinity>> {
@@ -1560,17 +1571,37 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertCustomerCrossBrandPurchases(crossPurchase: InsertCustomerCrossBrandPurchases): Promise<CustomerCrossBrandPurchases> {
-    const [upsertedCrossPurchase] = await db
-      .insert(customerCrossBrandPurchases)
-      .values(crossPurchase)
-      .onConflictDoUpdate({
-        target: [customerCrossBrandPurchases.storeId, customerCrossBrandPurchases.customerId, customerCrossBrandPurchases.primaryVendorId, customerCrossBrandPurchases.secondaryVendorId],
-        set: {
-          ...crossPurchase,
-        },
-      })
-      .returning();
-    return upsertedCrossPurchase;
+    // First try to find existing record
+    const existingRecords = await db.select()
+      .from(customerCrossBrandPurchases)
+      .where(and(
+        eq(customerCrossBrandPurchases.storeId, crossPurchase.storeId),
+        eq(customerCrossBrandPurchases.customerId, crossPurchase.customerId),
+        eq(customerCrossBrandPurchases.primaryVendorId, crossPurchase.primaryVendorId),
+        eq(customerCrossBrandPurchases.secondaryVendorId, crossPurchase.secondaryVendorId)
+      ))
+      .limit(1);
+    
+    if (existingRecords.length > 0) {
+      // Update existing record
+      const existingRecord = existingRecords[0];
+      const [updatedCrossPurchase] = await db
+        .update(customerCrossBrandPurchases)
+        .set({
+          crossPurchaseCount: existingRecord.crossPurchaseCount + (crossPurchase.crossPurchaseCount || 1),
+          totalCrossValue: (parseFloat(existingRecord.totalCrossValue) + parseFloat(crossPurchase.totalCrossValue || "0")).toString()
+        })
+        .where(eq(customerCrossBrandPurchases.id, existingRecord.id))
+        .returning();
+      return updatedCrossPurchase;
+    } else {
+      // Insert new record
+      const [newCrossPurchase] = await db
+        .insert(customerCrossBrandPurchases)
+        .values(crossPurchase)
+        .returning();
+      return newCrossPurchase;
+    }
   }
 
   async getCustomerCrossBrandPurchases(storeId: string, params?: PaginationParams & { customerId?: string; primaryVendorId?: string }): Promise<PaginatedResponse<CustomerCrossBrandPurchases>> {

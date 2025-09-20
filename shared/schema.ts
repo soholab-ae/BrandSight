@@ -248,6 +248,8 @@ export const customerBrandAffinity = pgTable("customer_brand_affinity", {
   index("IDX_customer_brand_affinity_vendor_id").on(table.vendorId),
   index("IDX_customer_brand_affinity_customer_id").on(table.customerId),
   index("IDX_customer_brand_affinity_created_at").on(table.createdAt),
+  // CRITICAL: Unique composite index for atomic upserts and race condition prevention
+  unique("customer_brand_affinity_unique_composite").on(table.storeId, table.customerId, table.vendorId),
 ]);
 
 export const customerCrossBrandPurchases = pgTable("customer_cross_brand_purchases", {
@@ -265,6 +267,8 @@ export const customerCrossBrandPurchases = pgTable("customer_cross_brand_purchas
   index("IDX_customer_cross_brand_primary_vendor").on(table.primaryVendorId),
   index("IDX_customer_cross_brand_secondary_vendor").on(table.secondaryVendorId),
   index("IDX_customer_cross_brand_created_at").on(table.createdAt),
+  // Enhanced index coverage for cross-brand analysis optimization
+  index("IDX_customer_cross_brand_analysis").on(table.storeId, table.primaryVendorId, table.secondaryVendorId),
 ]);
 
 // 3. Inventory Intelligence
