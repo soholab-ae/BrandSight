@@ -7,6 +7,14 @@ import {
   orderLineItems,
   vendorAnalytics,
   pageAnalytics,
+  alerts,
+  alertRules,
+  customerBrandAffinity,
+  customerCrossBrandPurchases,
+  inventoryAnalytics,
+  vendorInventorySummary,
+  salesForecasts,
+  forecastAccuracy,
   type User,
   type UpsertUser,
   type Store,
@@ -22,6 +30,22 @@ import {
   type VendorAnalytics,
   type InsertVendorAnalytics,
   type PageAnalytics,
+  type Alert,
+  type InsertAlert,
+  type AlertRule,
+  type InsertAlertRule,
+  type CustomerBrandAffinity,
+  type InsertCustomerBrandAffinity,
+  type CustomerCrossBrandPurchases,
+  type InsertCustomerCrossBrandPurchases,
+  type InventoryAnalytics,
+  type InsertInventoryAnalytics,
+  type VendorInventorySummary,
+  type InsertVendorInventorySummary,
+  type SalesForecast,
+  type InsertSalesForecast,
+  type ForecastAccuracy,
+  type InsertForecastAccuracy,
   type PaginationParams,
   type PaginatedResponse,
   type VendorMetrics,
@@ -81,6 +105,49 @@ export interface IStorage {
   getTopLandingPages(storeId: string, vendorId?: string, limit?: number): Promise<PageAnalytics[]>;
   getVendorOrdersInDateRange(storeId: string, vendorId: string, startDate: Date, endDate: Date): Promise<Order[]>;
   getVendorOrderItemsInDateRange(storeId: string, vendorId: string, startDate: Date, endDate: Date): Promise<OrderLineItem[]>;
+  
+  // ============= PHASE 1 NEW FEATURES =============
+  
+  // Smart Alerts System
+  createAlert(alert: InsertAlert): Promise<Alert>;
+  getStoreAlerts(storeId: string, params?: PaginationParams & { isRead?: boolean; severity?: string }): Promise<PaginatedResponse<Alert>>;
+  updateAlert(id: string, updates: Partial<Alert>): Promise<Alert>;
+  markAlertAsRead(id: string): Promise<Alert>;
+  acknowledgeAlert(id: string): Promise<Alert>;
+  deleteAlert(id: string): Promise<void>;
+  
+  createAlertRule(rule: InsertAlertRule): Promise<AlertRule>;
+  getStoreAlertRules(storeId: string, params?: PaginationParams): Promise<PaginatedResponse<AlertRule>>;
+  updateAlertRule(id: string, updates: Partial<AlertRule>): Promise<AlertRule>;
+  deleteAlertRule(id: string): Promise<void>;
+  getEnabledAlertRules(storeId: string, vendorId?: string): Promise<AlertRule[]>;
+  
+  // Customer Brand Loyalty Tracking
+  upsertCustomerBrandAffinity(affinity: InsertCustomerBrandAffinity): Promise<CustomerBrandAffinity>;
+  getCustomerBrandAffinities(storeId: string, params?: PaginationParams & { customerId?: string; vendorId?: string }): Promise<PaginatedResponse<CustomerBrandAffinity>>;
+  getTopCustomersByAffinity(storeId: string, vendorId: string, limit?: number): Promise<CustomerBrandAffinity[]>;
+  
+  upsertCustomerCrossBrandPurchases(crossPurchase: InsertCustomerCrossBrandPurchases): Promise<CustomerCrossBrandPurchases>;
+  getCustomerCrossBrandPurchases(storeId: string, params?: PaginationParams & { customerId?: string; primaryVendorId?: string }): Promise<PaginatedResponse<CustomerCrossBrandPurchases>>;
+  getCrossBrandAnalytics(storeId: string, vendorId: string): Promise<any>;
+  
+  // Inventory Intelligence
+  upsertInventoryAnalytics(analytics: InsertInventoryAnalytics): Promise<InventoryAnalytics>;
+  getInventoryAnalytics(storeId: string, params?: PaginationParams & { vendorId?: string; productId?: string; deadStockOnly?: boolean }): Promise<PaginatedResponse<InventoryAnalytics>>;
+  getDeadStockReport(storeId: string, vendorId?: string): Promise<InventoryAnalytics[]>;
+  
+  upsertVendorInventorySummary(summary: InsertVendorInventorySummary): Promise<VendorInventorySummary>;
+  getVendorInventorySummaries(storeId: string, params?: PaginationParams): Promise<PaginatedResponse<VendorInventorySummary>>;
+  getVendorInventorySummary(vendorId: string): Promise<VendorInventorySummary | undefined>;
+  
+  // Predictive Forecasting
+  createSalesForecast(forecast: InsertSalesForecast): Promise<SalesForecast>;
+  getSalesForecasts(storeId: string, params?: PaginationParams & { vendorId?: string; periodDays?: number }): Promise<PaginatedResponse<SalesForecast>>;
+  getLatestForecast(storeId: string, vendorId?: string, periodDays?: number): Promise<SalesForecast | undefined>;
+  
+  createForecastAccuracy(accuracy: InsertForecastAccuracy): Promise<ForecastAccuracy>;
+  getForecastAccuracy(storeId: string, params?: PaginationParams & { vendorId?: string }): Promise<PaginatedResponse<ForecastAccuracy>>;
+  getForecastAccuracyMetrics(storeId: string, vendorId?: string): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1196,6 +1263,620 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(orders.processedAt));
     
     return result;
+  }
+
+  // ============= SMART ALERTS SYSTEM =============
+  
+  async createAlert(alert: InsertAlert): Promise<Alert> {
+    const [newAlert] = await db.insert(alerts).values(alert).returning();
+    return newAlert;
+  }
+
+  async getStoreAlerts(storeId: string, params?: PaginationParams & { isRead?: boolean; severity?: string }): Promise<PaginatedResponse<Alert>> {
+    const { page = 1, limit = 50, sortBy = 'createdAt', sortDirection = 'desc', isRead, severity } = params || {};
+    const offset = (page - 1) * limit;
+
+    // Build conditions array
+    let conditions = [eq(alerts.storeId, storeId)];
+    
+    if (isRead !== undefined) {
+      conditions.push(eq(alerts.isRead, isRead));
+    }
+    
+    if (severity) {
+      conditions.push(eq(alerts.severity, severity as any));
+    }
+
+    // Determine ordering
+    const orderByClause = sortBy === 'createdAt' 
+      ? (sortDirection === 'asc' ? asc(alerts.createdAt) : desc(alerts.createdAt))
+      : (sortDirection === 'asc' ? asc(alerts.severity) : desc(alerts.severity));
+
+    // Build the queries
+    const query = db.select().from(alerts)
+      .where(and(...conditions))
+      .orderBy(orderByClause)
+      .limit(limit)
+      .offset(offset);
+    
+    const countQuery = db.select({ count: sql<number>`count(*)` })
+      .from(alerts)
+      .where(and(...conditions));
+
+    const [data, [{ count: total }]] = await Promise.all([
+      query,
+      countQuery
+    ]);
+
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: offset + limit < total,
+        hasPrev: page > 1
+      }
+    };
+  }
+
+  async updateAlert(id: string, updates: Partial<Alert>): Promise<Alert> {
+    const [alert] = await db
+      .update(alerts)
+      .set(updates)
+      .where(eq(alerts.id, id))
+      .returning();
+    return alert;
+  }
+
+  async markAlertAsRead(id: string): Promise<Alert> {
+    const [alert] = await db
+      .update(alerts)
+      .set({ isRead: true })
+      .where(eq(alerts.id, id))
+      .returning();
+    return alert;
+  }
+
+  async acknowledgeAlert(id: string): Promise<Alert> {
+    const [alert] = await db
+      .update(alerts)
+      .set({ acknowledgedAt: new Date() })
+      .where(eq(alerts.id, id))
+      .returning();
+    return alert;
+  }
+
+  async deleteAlert(id: string): Promise<void> {
+    await db.delete(alerts).where(eq(alerts.id, id));
+  }
+
+  async createAlertRule(rule: InsertAlertRule): Promise<AlertRule> {
+    const [newRule] = await db.insert(alertRules).values(rule).returning();
+    return newRule;
+  }
+
+  async getStoreAlertRules(storeId: string, params?: PaginationParams): Promise<PaginatedResponse<AlertRule>> {
+    const { page = 1, limit = 50, sortBy = 'createdAt', sortDirection = 'desc' } = params || {};
+    const offset = (page - 1) * limit;
+
+    // Build conditions array
+    let conditions = [eq(alertRules.storeId, storeId)];
+
+    // Determine ordering
+    const orderByClause = sortBy === 'createdAt' 
+      ? (sortDirection === 'asc' ? asc(alertRules.createdAt) : desc(alertRules.createdAt))
+      : (sortDirection === 'asc' ? asc(alertRules.enabled) : desc(alertRules.enabled));
+
+    // Build the queries
+    const query = db.select().from(alertRules)
+      .where(and(...conditions))
+      .orderBy(orderByClause)
+      .limit(limit)
+      .offset(offset);
+    
+    const countQuery = db.select({ count: sql<number>`count(*)` })
+      .from(alertRules)
+      .where(and(...conditions));
+
+    const [data, [{ count: total }]] = await Promise.all([
+      query,
+      countQuery
+    ]);
+
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: offset + limit < total,
+        hasPrev: page > 1
+      }
+    };
+  }
+
+  async updateAlertRule(id: string, updates: Partial<AlertRule>): Promise<AlertRule> {
+    const [rule] = await db
+      .update(alertRules)
+      .set(updates)
+      .where(eq(alertRules.id, id))
+      .returning();
+    return rule;
+  }
+
+  async deleteAlertRule(id: string): Promise<void> {
+    await db.delete(alertRules).where(eq(alertRules.id, id));
+  }
+
+  async getEnabledAlertRules(storeId: string, vendorId?: string): Promise<AlertRule[]> {
+    let conditions = [
+      eq(alertRules.storeId, storeId),
+      eq(alertRules.enabled, true)
+    ];
+    
+    if (vendorId) {
+      conditions.push(eq(alertRules.vendorId, vendorId));
+    }
+
+    return await db.select().from(alertRules)
+      .where(and(...conditions))
+      .orderBy(desc(alertRules.createdAt));
+  }
+
+  // ============= CUSTOMER BRAND LOYALTY TRACKING =============
+  
+  async upsertCustomerBrandAffinity(affinity: InsertCustomerBrandAffinity): Promise<CustomerBrandAffinity> {
+    const [upsertedAffinity] = await db
+      .insert(customerBrandAffinity)
+      .values(affinity)
+      .onConflictDoUpdate({
+        target: [customerBrandAffinity.storeId, customerBrandAffinity.customerId, customerBrandAffinity.vendorId],
+        set: {
+          ...affinity,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return upsertedAffinity;
+  }
+
+  async getCustomerBrandAffinities(storeId: string, params?: PaginationParams & { customerId?: string; vendorId?: string }): Promise<PaginatedResponse<CustomerBrandAffinity>> {
+    const { page = 1, limit = 50, sortBy = 'affinityScore', sortDirection = 'desc', customerId, vendorId } = params || {};
+    const offset = (page - 1) * limit;
+
+    // Build conditions array
+    let conditions = [eq(customerBrandAffinity.storeId, storeId)];
+    
+    if (customerId) {
+      conditions.push(eq(customerBrandAffinity.customerId, customerId));
+    }
+    
+    if (vendorId) {
+      conditions.push(eq(customerBrandAffinity.vendorId, vendorId));
+    }
+
+    // Determine ordering
+    const orderByClause = sortBy === 'affinityScore' 
+      ? (sortDirection === 'asc' ? asc(customerBrandAffinity.affinityScore) : desc(customerBrandAffinity.affinityScore))
+      : (sortDirection === 'asc' ? asc(customerBrandAffinity.createdAt) : desc(customerBrandAffinity.createdAt));
+
+    // Build the queries
+    const query = db.select().from(customerBrandAffinity)
+      .where(and(...conditions))
+      .orderBy(orderByClause)
+      .limit(limit)
+      .offset(offset);
+    
+    const countQuery = db.select({ count: sql<number>`count(*)` })
+      .from(customerBrandAffinity)
+      .where(and(...conditions));
+
+    const [data, [{ count: total }]] = await Promise.all([
+      query,
+      countQuery
+    ]);
+
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: offset + limit < total,
+        hasPrev: page > 1
+      }
+    };
+  }
+
+  async getTopCustomersByAffinity(storeId: string, vendorId: string, limit: number = 10): Promise<CustomerBrandAffinity[]> {
+    return await db.select().from(customerBrandAffinity)
+      .where(and(
+        eq(customerBrandAffinity.storeId, storeId),
+        eq(customerBrandAffinity.vendorId, vendorId)
+      ))
+      .orderBy(desc(customerBrandAffinity.affinityScore))
+      .limit(limit);
+  }
+
+  async upsertCustomerCrossBrandPurchases(crossPurchase: InsertCustomerCrossBrandPurchases): Promise<CustomerCrossBrandPurchases> {
+    const [upsertedCrossPurchase] = await db
+      .insert(customerCrossBrandPurchases)
+      .values(crossPurchase)
+      .onConflictDoUpdate({
+        target: [customerCrossBrandPurchases.storeId, customerCrossBrandPurchases.customerId, customerCrossBrandPurchases.primaryVendorId, customerCrossBrandPurchases.secondaryVendorId],
+        set: {
+          ...crossPurchase,
+        },
+      })
+      .returning();
+    return upsertedCrossPurchase;
+  }
+
+  async getCustomerCrossBrandPurchases(storeId: string, params?: PaginationParams & { customerId?: string; primaryVendorId?: string }): Promise<PaginatedResponse<CustomerCrossBrandPurchases>> {
+    const { page = 1, limit = 50, sortBy = 'crossPurchaseCount', sortDirection = 'desc', customerId, primaryVendorId } = params || {};
+    const offset = (page - 1) * limit;
+
+    // Build conditions array
+    let conditions = [eq(customerCrossBrandPurchases.storeId, storeId)];
+    
+    if (customerId) {
+      conditions.push(eq(customerCrossBrandPurchases.customerId, customerId));
+    }
+    
+    if (primaryVendorId) {
+      conditions.push(eq(customerCrossBrandPurchases.primaryVendorId, primaryVendorId));
+    }
+
+    // Determine ordering
+    const orderByClause = sortBy === 'crossPurchaseCount' 
+      ? (sortDirection === 'asc' ? asc(customerCrossBrandPurchases.crossPurchaseCount) : desc(customerCrossBrandPurchases.crossPurchaseCount))
+      : (sortDirection === 'asc' ? asc(customerCrossBrandPurchases.createdAt) : desc(customerCrossBrandPurchases.createdAt));
+
+    // Build the queries
+    const query = db.select().from(customerCrossBrandPurchases)
+      .where(and(...conditions))
+      .orderBy(orderByClause)
+      .limit(limit)
+      .offset(offset);
+    
+    const countQuery = db.select({ count: sql<number>`count(*)` })
+      .from(customerCrossBrandPurchases)
+      .where(and(...conditions));
+
+    const [data, [{ count: total }]] = await Promise.all([
+      query,
+      countQuery
+    ]);
+
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: offset + limit < total,
+        hasPrev: page > 1
+      }
+    };
+  }
+
+  async getCrossBrandAnalytics(storeId: string, vendorId: string): Promise<any> {
+    // Get cross-brand purchase patterns for a specific vendor
+    const crossBrandData = await db
+      .select({
+        secondaryVendorId: customerCrossBrandPurchases.secondaryVendorId,
+        avgCrossPurchases: sql<number>`AVG(${customerCrossBrandPurchases.crossPurchaseCount})`,
+        totalCustomers: sql<number>`COUNT(DISTINCT ${customerCrossBrandPurchases.customerId})`,
+        avgCrossValue: sql<number>`AVG(${customerCrossBrandPurchases.totalCrossValue})`,
+      })
+      .from(customerCrossBrandPurchases)
+      .where(and(
+        eq(customerCrossBrandPurchases.storeId, storeId),
+        eq(customerCrossBrandPurchases.primaryVendorId, vendorId)
+      ))
+      .groupBy(customerCrossBrandPurchases.secondaryVendorId)
+      .orderBy(desc(sql`AVG(${customerCrossBrandPurchases.crossPurchaseCount})`));
+
+    return {
+      crossBrandPatterns: crossBrandData,
+      totalCrossBrandCustomers: crossBrandData.reduce((sum, item) => sum + item.totalCustomers, 0)
+    };
+  }
+
+  // ============= INVENTORY INTELLIGENCE =============
+  
+  async upsertInventoryAnalytics(analytics: InsertInventoryAnalytics): Promise<InventoryAnalytics> {
+    const [upsertedAnalytics] = await db
+      .insert(inventoryAnalytics)
+      .values(analytics)
+      .onConflictDoUpdate({
+        target: [inventoryAnalytics.storeId, inventoryAnalytics.vendorId, inventoryAnalytics.productId],
+        set: {
+          ...analytics,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return upsertedAnalytics;
+  }
+
+  async getInventoryAnalytics(storeId: string, params?: PaginationParams & { vendorId?: string; productId?: string; deadStockOnly?: boolean }): Promise<PaginatedResponse<InventoryAnalytics>> {
+    const { page = 1, limit = 50, sortBy = 'createdAt', sortDirection = 'desc', vendorId, productId, deadStockOnly } = params || {};
+    const offset = (page - 1) * limit;
+
+    // Build conditions array
+    let conditions = [eq(inventoryAnalytics.storeId, storeId)];
+    
+    if (vendorId) {
+      conditions.push(eq(inventoryAnalytics.vendorId, vendorId));
+    }
+    
+    if (productId) {
+      conditions.push(eq(inventoryAnalytics.productId, productId));
+    }
+    
+    if (deadStockOnly) {
+      conditions.push(eq(inventoryAnalytics.deadStockFlag, true));
+    }
+
+    // Determine ordering
+    const orderByClause = sortBy === 'createdAt' 
+      ? (sortDirection === 'asc' ? asc(inventoryAnalytics.createdAt) : desc(inventoryAnalytics.createdAt))
+      : (sortDirection === 'asc' ? asc(inventoryAnalytics.sellThroughRate) : desc(inventoryAnalytics.sellThroughRate));
+
+    // Build the queries
+    const query = db.select().from(inventoryAnalytics)
+      .where(and(...conditions))
+      .orderBy(orderByClause)
+      .limit(limit)
+      .offset(offset);
+    
+    const countQuery = db.select({ count: sql<number>`count(*)` })
+      .from(inventoryAnalytics)
+      .where(and(...conditions));
+
+    const [data, [{ count: total }]] = await Promise.all([
+      query,
+      countQuery
+    ]);
+
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: offset + limit < total,
+        hasPrev: page > 1
+      }
+    };
+  }
+
+  async getDeadStockReport(storeId: string, vendorId?: string): Promise<InventoryAnalytics[]> {
+    let conditions = [
+      eq(inventoryAnalytics.storeId, storeId),
+      eq(inventoryAnalytics.deadStockFlag, true)
+    ];
+    
+    if (vendorId) {
+      conditions.push(eq(inventoryAnalytics.vendorId, vendorId));
+    }
+
+    return await db.select().from(inventoryAnalytics)
+      .where(and(...conditions))
+      .orderBy(desc(inventoryAnalytics.daysOfInventory));
+  }
+
+  async upsertVendorInventorySummary(summary: InsertVendorInventorySummary): Promise<VendorInventorySummary> {
+    const [upsertedSummary] = await db
+      .insert(vendorInventorySummary)
+      .values(summary)
+      .onConflictDoUpdate({
+        target: [vendorInventorySummary.vendorId],
+        set: {
+          ...summary,
+        },
+      })
+      .returning();
+    return upsertedSummary;
+  }
+
+  async getVendorInventorySummaries(storeId: string, params?: PaginationParams): Promise<PaginatedResponse<VendorInventorySummary>> {
+    const { page = 1, limit = 50, sortBy = 'totalProducts', sortDirection = 'desc' } = params || {};
+    const offset = (page - 1) * limit;
+
+    // Build conditions array
+    let conditions = [eq(vendorInventorySummary.storeId, storeId)];
+
+    // Determine ordering
+    const orderByClause = sortBy === 'totalProducts' 
+      ? (sortDirection === 'asc' ? asc(vendorInventorySummary.totalProducts) : desc(vendorInventorySummary.totalProducts))
+      : (sortDirection === 'asc' ? asc(vendorInventorySummary.avgSellThroughRate) : desc(vendorInventorySummary.avgSellThroughRate));
+
+    // Build the queries
+    const query = db.select().from(vendorInventorySummary)
+      .where(and(...conditions))
+      .orderBy(orderByClause)
+      .limit(limit)
+      .offset(offset);
+    
+    const countQuery = db.select({ count: sql<number>`count(*)` })
+      .from(vendorInventorySummary)
+      .where(and(...conditions));
+
+    const [data, [{ count: total }]] = await Promise.all([
+      query,
+      countQuery
+    ]);
+
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: offset + limit < total,
+        hasPrev: page > 1
+      }
+    };
+  }
+
+  async getVendorInventorySummary(vendorId: string): Promise<VendorInventorySummary | undefined> {
+    const [summary] = await db.select().from(vendorInventorySummary)
+      .where(eq(vendorInventorySummary.vendorId, vendorId));
+    return summary;
+  }
+
+  // ============= PREDICTIVE FORECASTING =============
+  
+  async createSalesForecast(forecast: InsertSalesForecast): Promise<SalesForecast> {
+    const [newForecast] = await db.insert(salesForecasts).values(forecast).returning();
+    return newForecast;
+  }
+
+  async getSalesForecasts(storeId: string, params?: PaginationParams & { vendorId?: string; periodDays?: number }): Promise<PaginatedResponse<SalesForecast>> {
+    const { page = 1, limit = 50, sortBy = 'forecastDate', sortDirection = 'desc', vendorId, periodDays } = params || {};
+    const offset = (page - 1) * limit;
+
+    // Build conditions array
+    let conditions = [eq(salesForecasts.storeId, storeId)];
+    
+    if (vendorId) {
+      conditions.push(eq(salesForecasts.vendorId, vendorId));
+    }
+    
+    if (periodDays) {
+      conditions.push(eq(salesForecasts.periodDays, periodDays));
+    }
+
+    // Determine ordering
+    const orderByClause = sortBy === 'forecastDate' 
+      ? (sortDirection === 'asc' ? asc(salesForecasts.forecastDate) : desc(salesForecasts.forecastDate))
+      : (sortDirection === 'asc' ? asc(salesForecasts.createdAt) : desc(salesForecasts.createdAt));
+
+    // Build the queries
+    const query = db.select().from(salesForecasts)
+      .where(and(...conditions))
+      .orderBy(orderByClause)
+      .limit(limit)
+      .offset(offset);
+    
+    const countQuery = db.select({ count: sql<number>`count(*)` })
+      .from(salesForecasts)
+      .where(and(...conditions));
+
+    const [data, [{ count: total }]] = await Promise.all([
+      query,
+      countQuery
+    ]);
+
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: offset + limit < total,
+        hasPrev: page > 1
+      }
+    };
+  }
+
+  async getLatestForecast(storeId: string, vendorId?: string, periodDays?: number): Promise<SalesForecast | undefined> {
+    let conditions = [eq(salesForecasts.storeId, storeId)];
+    
+    if (vendorId) {
+      conditions.push(eq(salesForecasts.vendorId, vendorId));
+    }
+    
+    if (periodDays) {
+      conditions.push(eq(salesForecasts.periodDays, periodDays));
+    }
+
+    const [forecast] = await db.select().from(salesForecasts)
+      .where(and(...conditions))
+      .orderBy(desc(salesForecasts.createdAt))
+      .limit(1);
+    
+    return forecast;
+  }
+
+  async createForecastAccuracy(accuracy: InsertForecastAccuracy): Promise<ForecastAccuracy> {
+    const [newAccuracy] = await db.insert(forecastAccuracy).values(accuracy).returning();
+    return newAccuracy;
+  }
+
+  async getForecastAccuracy(storeId: string, params?: PaginationParams & { vendorId?: string }): Promise<PaginatedResponse<ForecastAccuracy>> {
+    const { page = 1, limit = 50, sortBy = 'forecastDate', sortDirection = 'desc', vendorId } = params || {};
+    const offset = (page - 1) * limit;
+
+    // Build conditions array
+    let conditions = [eq(forecastAccuracy.storeId, storeId)];
+    
+    if (vendorId) {
+      conditions.push(eq(forecastAccuracy.vendorId, vendorId));
+    }
+
+    // Determine ordering
+    const orderByClause = sortBy === 'forecastDate' 
+      ? (sortDirection === 'asc' ? asc(forecastAccuracy.forecastDate) : desc(forecastAccuracy.forecastDate))
+      : (sortDirection === 'asc' ? asc(forecastAccuracy.accuracyPercentage) : desc(forecastAccuracy.accuracyPercentage));
+
+    // Build the queries
+    const query = db.select().from(forecastAccuracy)
+      .where(and(...conditions))
+      .orderBy(orderByClause)
+      .limit(limit)
+      .offset(offset);
+    
+    const countQuery = db.select({ count: sql<number>`count(*)` })
+      .from(forecastAccuracy)
+      .where(and(...conditions));
+
+    const [data, [{ count: total }]] = await Promise.all([
+      query,
+      countQuery
+    ]);
+
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: offset + limit < total,
+        hasPrev: page > 1
+      }
+    };
+  }
+
+  async getForecastAccuracyMetrics(storeId: string, vendorId?: string): Promise<any> {
+    let conditions = [eq(forecastAccuracy.storeId, storeId)];
+    
+    if (vendorId) {
+      conditions.push(eq(forecastAccuracy.vendorId, vendorId));
+    }
+
+    const [metrics] = await db
+      .select({
+        avgAccuracy: sql<number>`AVG(${forecastAccuracy.accuracyPercentage})`,
+        minAccuracy: sql<number>`MIN(${forecastAccuracy.accuracyPercentage})`,
+        maxAccuracy: sql<number>`MAX(${forecastAccuracy.accuracyPercentage})`,
+        totalForecasts: sql<number>`COUNT(*)`,
+      })
+      .from(forecastAccuracy)
+      .where(and(...conditions));
+
+    return metrics;
   }
 }
 

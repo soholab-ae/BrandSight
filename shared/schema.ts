@@ -9,9 +9,15 @@ import {
   decimal,
   integer,
   boolean,
+  pgEnum,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+
+// Enums for new features
+export const alertTypeEnum = pgEnum('alert_type', ['performance_drop', 'performance_spike', 'inventory_low', 'sales_trend']);
+export const severityEnum = pgEnum('severity', ['low', 'medium', 'high']);
+export const thresholdTypeEnum = pgEnum('threshold_type', ['percentage', 'absolute']);
 
 // Session storage table (required for auth)
 export const sessions = pgTable(
@@ -178,6 +184,156 @@ export const pageAnalytics = pgTable("page_analytics", {
   index("IDX_page_analytics_path").on(table.path),
 ]);
 
+// ============= PHASE 1 NEW FEATURES =============
+
+// 1. Smart Alerts System
+export const alerts = pgTable("alerts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  storeId: varchar("store_id").notNull().references(() => stores.id),
+  alertType: alertTypeEnum("alert_type").notNull(),
+  message: text("message").notNull(),
+  thresholdValue: decimal("threshold_value", { precision: 10, scale: 2 }),
+  currentValue: decimal("current_value", { precision: 10, scale: 2 }),
+  severity: severityEnum("severity").notNull(),
+  vendorId: varchar("vendor_id").references(() => vendors.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  isRead: boolean("is_read").default(false),
+}, (table) => [
+  index("IDX_alerts_store_id").on(table.storeId),
+  index("IDX_alerts_vendor_id").on(table.vendorId),
+  index("IDX_alerts_created_at").on(table.createdAt),
+  index("IDX_alerts_severity").on(table.severity),
+  index("IDX_alerts_is_read").on(table.isRead),
+]);
+
+export const alertRules = pgTable("alert_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  storeId: varchar("store_id").notNull().references(() => stores.id),
+  alertType: alertTypeEnum("alert_type").notNull(),
+  vendorId: varchar("vendor_id").references(() => vendors.id),
+  thresholdType: thresholdTypeEnum("threshold_type").notNull(),
+  thresholdValue: decimal("threshold_value", { precision: 10, scale: 2 }).notNull(),
+  enabled: boolean("enabled").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("IDX_alert_rules_store_id").on(table.storeId),
+  index("IDX_alert_rules_vendor_id").on(table.vendorId),
+  index("IDX_alert_rules_created_at").on(table.createdAt),
+  index("IDX_alert_rules_enabled").on(table.enabled),
+]);
+
+// 2. Customer Brand Loyalty Tracking
+export const customerBrandAffinity = pgTable("customer_brand_affinity", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  storeId: varchar("store_id").notNull().references(() => stores.id),
+  customerId: text("customer_id").notNull(),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id),
+  affinityScore: decimal("affinity_score", { precision: 5, scale: 2 }).notNull(),
+  totalOrders: integer("total_orders").default(0),
+  totalSpent: decimal("total_spent", { precision: 10, scale: 2 }).default("0"),
+  firstPurchase: timestamp("first_purchase"),
+  lastPurchase: timestamp("last_purchase"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("IDX_customer_brand_affinity_store_id").on(table.storeId),
+  index("IDX_customer_brand_affinity_vendor_id").on(table.vendorId),
+  index("IDX_customer_brand_affinity_customer_id").on(table.customerId),
+  index("IDX_customer_brand_affinity_created_at").on(table.createdAt),
+]);
+
+export const customerCrossBrandPurchases = pgTable("customer_cross_brand_purchases", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  storeId: varchar("store_id").notNull().references(() => stores.id),
+  customerId: text("customer_id").notNull(),
+  primaryVendorId: varchar("primary_vendor_id").notNull().references(() => vendors.id),
+  secondaryVendorId: varchar("secondary_vendor_id").notNull().references(() => vendors.id),
+  crossPurchaseCount: integer("cross_purchase_count").default(0),
+  totalCrossValue: decimal("total_cross_value", { precision: 10, scale: 2 }).default("0"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("IDX_customer_cross_brand_store_id").on(table.storeId),
+  index("IDX_customer_cross_brand_customer_id").on(table.customerId),
+  index("IDX_customer_cross_brand_primary_vendor").on(table.primaryVendorId),
+  index("IDX_customer_cross_brand_secondary_vendor").on(table.secondaryVendorId),
+  index("IDX_customer_cross_brand_created_at").on(table.createdAt),
+]);
+
+// 3. Inventory Intelligence
+export const inventoryAnalytics = pgTable("inventory_analytics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  productId: varchar("product_id").notNull().references(() => products.id),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id),
+  storeId: varchar("store_id").notNull().references(() => stores.id),
+  sellThroughRate: decimal("sell_through_rate", { precision: 5, scale: 4 }),
+  daysOfInventory: integer("days_of_inventory"),
+  reorderPoint: integer("reorder_point"),
+  deadStockFlag: boolean("dead_stock_flag").default(false),
+  marginPercentage: decimal("margin_percentage", { precision: 5, scale: 2 }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("IDX_inventory_analytics_store_id").on(table.storeId),
+  index("IDX_inventory_analytics_vendor_id").on(table.vendorId),
+  index("IDX_inventory_analytics_product_id").on(table.productId),
+  index("IDX_inventory_analytics_created_at").on(table.createdAt),
+  index("IDX_inventory_analytics_dead_stock").on(table.deadStockFlag),
+]);
+
+export const vendorInventorySummary = pgTable("vendor_inventory_summary", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  vendorId: varchar("vendor_id").notNull().references(() => vendors.id),
+  storeId: varchar("store_id").notNull().references(() => stores.id),
+  totalProducts: integer("total_products").default(0),
+  activeProducts: integer("active_products").default(0),
+  deadStockCount: integer("dead_stock_count").default(0),
+  avgSellThroughRate: decimal("avg_sell_through_rate", { precision: 5, scale: 4 }),
+  totalInventoryValue: decimal("total_inventory_value", { precision: 12, scale: 2 }).default("0"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("IDX_vendor_inventory_summary_store_id").on(table.storeId),
+  index("IDX_vendor_inventory_summary_vendor_id").on(table.vendorId),
+  index("IDX_vendor_inventory_summary_created_at").on(table.createdAt),
+]);
+
+// 4. Predictive Forecasting
+export const salesForecasts = pgTable("sales_forecasts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  storeId: varchar("store_id").notNull().references(() => stores.id),
+  vendorId: varchar("vendor_id").references(() => vendors.id),
+  forecastDate: timestamp("forecast_date").notNull(),
+  periodDays: integer("period_days").notNull(), // 30, 60, or 90
+  predictedSales: decimal("predicted_sales", { precision: 10, scale: 2 }).notNull(),
+  predictedOrders: integer("predicted_orders"),
+  confidenceScore: decimal("confidence_score", { precision: 5, scale: 4 }),
+  modelUsed: varchar("model_used"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("IDX_sales_forecasts_store_id").on(table.storeId),
+  index("IDX_sales_forecasts_vendor_id").on(table.vendorId),
+  index("IDX_sales_forecasts_forecast_date").on(table.forecastDate),
+  index("IDX_sales_forecasts_created_at").on(table.createdAt),
+]);
+
+export const forecastAccuracy = pgTable("forecast_accuracy", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  storeId: varchar("store_id").notNull().references(() => stores.id),
+  vendorId: varchar("vendor_id").references(() => vendors.id),
+  forecastPeriod: integer("forecast_period").notNull(),
+  predictedValue: decimal("predicted_value", { precision: 10, scale: 2 }).notNull(),
+  actualValue: decimal("actual_value", { precision: 10, scale: 2 }).notNull(),
+  accuracyPercentage: decimal("accuracy_percentage", { precision: 5, scale: 2 }),
+  forecastDate: timestamp("forecast_date").notNull(),
+  recordedAt: timestamp("recorded_at").defaultNow(),
+}, (table) => [
+  index("IDX_forecast_accuracy_store_id").on(table.storeId),
+  index("IDX_forecast_accuracy_vendor_id").on(table.vendorId),
+  index("IDX_forecast_accuracy_forecast_date").on(table.forecastDate),
+  index("IDX_forecast_accuracy_recorded_at").on(table.recordedAt),
+]);
+
 // Schema exports
 export const insertStoreSchema = createInsertSchema(stores).omit({
   id: true,
@@ -211,6 +367,49 @@ export const insertVendorAnalyticsSchema = createInsertSchema(vendorAnalytics).o
   createdAt: true,
 });
 
+// New Phase 1 feature schemas
+export const insertAlertSchema = createInsertSchema(alerts).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertAlertRuleSchema = createInsertSchema(alertRules).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertCustomerBrandAffinitySchema = createInsertSchema(customerBrandAffinity).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertCustomerCrossBrandPurchasesSchema = createInsertSchema(customerCrossBrandPurchases).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertInventoryAnalyticsSchema = createInsertSchema(inventoryAnalytics).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertVendorInventorySummarySchema = createInsertSchema(vendorInventorySummary).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertSalesForecastSchema = createInsertSchema(salesForecasts).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertForecastAccuracySchema = createInsertSchema(forecastAccuracy).omit({
+  id: true,
+  recordedAt: true,
+});
+
 // Types
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
@@ -237,6 +436,31 @@ export type PageAnalytics = typeof pageAnalytics.$inferSelect;
 
 export type Subscription = typeof subscriptions.$inferSelect;
 export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
+
+// New Phase 1 feature types
+export type Alert = typeof alerts.$inferSelect;
+export type InsertAlert = z.infer<typeof insertAlertSchema>;
+
+export type AlertRule = typeof alertRules.$inferSelect;
+export type InsertAlertRule = z.infer<typeof insertAlertRuleSchema>;
+
+export type CustomerBrandAffinity = typeof customerBrandAffinity.$inferSelect;
+export type InsertCustomerBrandAffinity = z.infer<typeof insertCustomerBrandAffinitySchema>;
+
+export type CustomerCrossBrandPurchases = typeof customerCrossBrandPurchases.$inferSelect;
+export type InsertCustomerCrossBrandPurchases = z.infer<typeof insertCustomerCrossBrandPurchasesSchema>;
+
+export type InventoryAnalytics = typeof inventoryAnalytics.$inferSelect;
+export type InsertInventoryAnalytics = z.infer<typeof insertInventoryAnalyticsSchema>;
+
+export type VendorInventorySummary = typeof vendorInventorySummary.$inferSelect;
+export type InsertVendorInventorySummary = z.infer<typeof insertVendorInventorySummarySchema>;
+
+export type SalesForecast = typeof salesForecasts.$inferSelect;
+export type InsertSalesForecast = z.infer<typeof insertSalesForecastSchema>;
+
+export type ForecastAccuracy = typeof forecastAccuracy.$inferSelect;
+export type InsertForecastAccuracy = z.infer<typeof insertForecastAccuracySchema>;
 
 // Pagination types
 export interface PaginationParams {
