@@ -111,15 +111,15 @@ export interface IStorage {
   // Smart Alerts System
   createAlert(alert: InsertAlert): Promise<Alert>;
   getStoreAlerts(storeId: string, params?: PaginationParams & { isRead?: boolean; severity?: string }): Promise<PaginatedResponse<Alert>>;
-  updateAlert(id: string, updates: Partial<Alert>): Promise<Alert>;
-  markAlertAsRead(id: string): Promise<Alert>;
-  acknowledgeAlert(id: string): Promise<Alert>;
-  deleteAlert(id: string): Promise<void>;
+  updateAlert(storeId: string, id: string, updates: Partial<Alert>): Promise<Alert>;
+  markAlertAsRead(storeId: string, id: string): Promise<Alert>;
+  acknowledgeAlert(storeId: string, id: string): Promise<Alert>;
+  deleteAlert(storeId: string, id: string): Promise<void>;
   
   createAlertRule(rule: InsertAlertRule): Promise<AlertRule>;
   getStoreAlertRules(storeId: string, params?: PaginationParams): Promise<PaginatedResponse<AlertRule>>;
-  updateAlertRule(id: string, updates: Partial<AlertRule>): Promise<AlertRule>;
-  deleteAlertRule(id: string): Promise<void>;
+  updateAlertRule(storeId: string, id: string, updates: Partial<AlertRule>): Promise<AlertRule>;
+  deleteAlertRule(storeId: string, id: string): Promise<void>;
   getEnabledAlertRules(storeId: string, vendorId?: string): Promise<AlertRule[]>;
   
   // Customer Brand Loyalty Tracking
@@ -1268,8 +1268,35 @@ export class DatabaseStorage implements IStorage {
   // ============= SMART ALERTS SYSTEM =============
   
   async createAlert(alert: InsertAlert): Promise<Alert> {
-    const [newAlert] = await db.insert(alerts).values(alert).returning();
-    return newAlert;
+    try {
+      const [newAlert] = await db.insert(alerts).values(alert).returning();
+      return newAlert;
+    } catch (error: any) {
+      // Handle unique constraint violation for duplicate prevention
+      if (error.code === '23505' && error.constraint === 'alerts_duplicate_prevention') {
+        // Duplicate alert within time bucket - return existing alert or create with modified message
+        console.log(`Duplicate alert prevented for store: ${alert.storeId}, vendor: ${alert.vendorId}, type: ${alert.alertType}`);
+        
+        // Find the existing alert to return it instead
+        const existingAlerts = await this.getStoreAlerts(alert.storeId, {
+          page: 1,
+          limit: 1,
+          vendorId: alert.vendorId || undefined
+        });
+        
+        const existingAlert = existingAlerts.data.find(a => 
+          a.alertType === alert.alertType && 
+          a.vendorId === alert.vendorId
+        );
+        
+        if (existingAlert) {
+          return existingAlert;
+        }
+      }
+      
+      // Re-throw other errors
+      throw error;
+    }
   }
 
   async getStoreAlerts(storeId: string, params?: PaginationParams & { isRead?: boolean; severity?: string }): Promise<PaginatedResponse<Alert>> {
@@ -1321,35 +1348,54 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async updateAlert(id: string, updates: Partial<Alert>): Promise<Alert> {
+  async updateAlert(storeId: string, id: string, updates: Partial<Alert>): Promise<Alert> {
     const [alert] = await db
       .update(alerts)
       .set(updates)
-      .where(eq(alerts.id, id))
+      .where(and(eq(alerts.id, id), eq(alerts.storeId, storeId)))
       .returning();
+    
+    if (!alert) {
+      throw new Error('Alert not found or access denied');
+    }
     return alert;
   }
 
-  async markAlertAsRead(id: string): Promise<Alert> {
+  async markAlertAsRead(storeId: string, id: string): Promise<Alert> {
     const [alert] = await db
       .update(alerts)
       .set({ isRead: true })
-      .where(eq(alerts.id, id))
+      .where(and(eq(alerts.id, id), eq(alerts.storeId, storeId)))
       .returning();
+    
+    if (!alert) {
+      throw new Error('Alert not found or access denied');
+    }
     return alert;
   }
 
-  async acknowledgeAlert(id: string): Promise<Alert> {
+  async acknowledgeAlert(storeId: string, id: string): Promise<Alert> {
     const [alert] = await db
       .update(alerts)
       .set({ acknowledgedAt: new Date() })
-      .where(eq(alerts.id, id))
+      .where(and(eq(alerts.id, id), eq(alerts.storeId, storeId)))
       .returning();
+    
+    if (!alert) {
+      throw new Error('Alert not found or access denied');
+    }
     return alert;
   }
 
-  async deleteAlert(id: string): Promise<void> {
-    await db.delete(alerts).where(eq(alerts.id, id));
+  async deleteAlert(storeId: string, id: string): Promise<void> {
+    const result = await db
+      .delete(alerts)
+      .where(and(eq(alerts.id, id), eq(alerts.storeId, storeId)));
+    
+    // Check if any rows were affected
+    if (result.rowCount === 0) {
+      throw new Error('Alert not found or access denied');
+    }
   }
 
   async createAlertRule(rule: InsertAlertRule): Promise<AlertRule> {
@@ -1398,17 +1444,28 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async updateAlertRule(id: string, updates: Partial<AlertRule>): Promise<AlertRule> {
+  async updateAlertRule(storeId: string, id: string, updates: Partial<AlertRule>): Promise<AlertRule> {
     const [rule] = await db
       .update(alertRules)
       .set(updates)
-      .where(eq(alertRules.id, id))
+      .where(and(eq(alertRules.id, id), eq(alertRules.storeId, storeId)))
       .returning();
+    
+    if (!rule) {
+      throw new Error('Alert rule not found or access denied');
+    }
     return rule;
   }
 
-  async deleteAlertRule(id: string): Promise<void> {
-    await db.delete(alertRules).where(eq(alertRules.id, id));
+  async deleteAlertRule(storeId: string, id: string): Promise<void> {
+    const result = await db
+      .delete(alertRules)
+      .where(and(eq(alertRules.id, id), eq(alertRules.storeId, storeId)));
+    
+    // Check if any rows were affected
+    if (result.rowCount === 0) {
+      throw new Error('Alert rule not found or access denied');
+    }
   }
 
   async getEnabledAlertRules(storeId: string, vendorId?: string): Promise<AlertRule[]> {

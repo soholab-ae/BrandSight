@@ -10,6 +10,7 @@ import {
   integer,
   boolean,
   pgEnum,
+  unique,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -200,12 +201,17 @@ export const alerts = pgTable("alerts", {
   createdAt: timestamp("created_at").defaultNow(),
   acknowledgedAt: timestamp("acknowledged_at"),
   isRead: boolean("is_read").default(false),
+  // Time bucket for duplicate prevention (hour-based: YYYY-MM-DD-HH)
+  timeBucket: varchar("time_bucket").notNull().default(sql`to_char(now(), 'YYYY-MM-DD-HH24')`),
 }, (table) => [
   index("IDX_alerts_store_id").on(table.storeId),
   index("IDX_alerts_vendor_id").on(table.vendorId),
   index("IDX_alerts_created_at").on(table.createdAt),
   index("IDX_alerts_severity").on(table.severity),
   index("IDX_alerts_is_read").on(table.isRead),
+  index("IDX_alerts_time_bucket").on(table.timeBucket),
+  // Unique constraint to prevent duplicate alerts within the same time bucket
+  unique("alerts_duplicate_prevention").on(table.storeId, table.vendorId, table.alertType, table.timeBucket),
 ]);
 
 export const alertRules = pgTable("alert_rules", {
@@ -371,6 +377,9 @@ export const insertVendorAnalyticsSchema = createInsertSchema(vendorAnalytics).o
 export const insertAlertSchema = createInsertSchema(alerts).omit({
   id: true,
   createdAt: true,
+  acknowledgedAt: true,
+  isRead: true,
+  timeBucket: true, // Auto-generated, no need for manual input
 });
 
 export const insertAlertRuleSchema = createInsertSchema(alertRules).omit({
