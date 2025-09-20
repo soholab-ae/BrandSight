@@ -10,26 +10,8 @@ export class MemoryOptimizer {
    * OPTIMIZED - Reduced frequency to prevent performance issues
    */
   static initialize() {
-    // Only initialize once
-    if (this.cleanupInterval) {
-      return;
-    }
-
-    // Reduced frequency: cleanup every 15 minutes instead of 5
-    this.cleanupInterval = setInterval(() => {
-      this.performCleanup();
-    }, 15 * 60 * 1000);
-
-    // Disabled memory pressure detection - was causing blocking operations
-    // if ('memory' in performance) {
-    //   this.monitorMemoryUsage();
-    // }
-
-    // Keep essential cleanup events only
-    window.addEventListener('beforeunload', () => {
-      this.performCleanup();
-      this.cleanup();
-    });
+    // COMPLETELY DISABLED FOR PERFORMANCE - No initialization at all
+    return;
   }
 
   /**
@@ -37,28 +19,8 @@ export class MemoryOptimizer {
    * OPTIMIZED - Reduced frequency and scope to prevent blocking
    */
   static performCleanup() {
-    // Console logging completely disabled to prevent console spam
-    
-    // Less aggressive cleanup - only remove queries older than 30 minutes
-    const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000;
-    
-    queryClient.getQueryCache().getAll().forEach(query => {
-      const lastUpdated = query.state.dataUpdatedAt;
-      
-      if (lastUpdated < thirtyMinutesAgo) {
-        queryClient.removeQueries({ queryKey: query.queryKey });
-      }
-    });
-
-    // Only clear mutation cache if there are many mutations
-    const mutations = queryClient.getMutationCache().getAll();
-    if (mutations.length > 10) {
-      queryClient.getMutationCache().clear();
-    }
-
-    // Remove forced garbage collection - was causing blocking
-    
-    // Console logging completely disabled to prevent console spam
+    // COMPLETELY DISABLED FOR PERFORMANCE - No cleanup operations
+    return;
   }
 
   /**

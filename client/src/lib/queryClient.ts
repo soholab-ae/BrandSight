@@ -41,15 +41,15 @@ export const getQueryFn: <T>(options: {
     await throwIfResNotOk(res);
     const data = await res.json();
     
-    // Memory optimization: trigger cleanup for large datasets
-    if (typeof window !== 'undefined' && data && Array.isArray(data) && data.length > 100) {
-      setTimeout(() => {
-        const memoryStats = MemoryOptimizer.getMemoryStats();
-        if (memoryStats.cacheSize > 10 * 1024 * 1024) { // 10MB threshold
-          MemoryOptimizer.performCleanup();
-        }
-      }, 1000);
-    }
+    // Memory optimization COMPLETELY DISABLED for performance
+    // if (typeof window !== 'undefined' && data && Array.isArray(data) && data.length > 100) {
+    //   setTimeout(() => {
+    //     const memoryStats = MemoryOptimizer.getMemoryStats();
+    //     if (memoryStats.cacheSize > 10 * 1024 * 1024) { // 10MB threshold
+    //       MemoryOptimizer.performCleanup();
+    //     }
+    //   }, 1000);
+    // }
     
     return data;
   };
@@ -71,8 +71,8 @@ export const queryClient = new QueryClient({
   },
 });
 
-// Initialize memory optimization after QueryClient creation
-if (typeof window !== 'undefined') {
-  MemoryOptimizer.initialize();
-  MemoryOptimizer.optimizeQueryCache();
-}
+// Memory optimization COMPLETELY DISABLED for performance
+// if (typeof window !== 'undefined') {
+//   MemoryOptimizer.initialize();
+//   MemoryOptimizer.optimizeQueryCache();
+// }
