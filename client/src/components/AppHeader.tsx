@@ -2,9 +2,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Bell, ChevronDown, Store, Menu } from "lucide-react";
+import { ChevronDown, Store, Menu } from "lucide-react";
 import logoUrl from "@/assets/logo.png";
 import { useIsMobile } from "@/hooks/use-mobile";
+import NotificationBell from "@/components/NotificationBell";
 
 interface AppHeaderProps {
   onMobileMenuClick?: () => void;
@@ -36,14 +37,7 @@ export default function AppHeader({ onMobileMenuClick, mobileMenuButton }: AppHe
           </div>
           
           <div className="flex items-center space-x-2 sm:space-x-4">
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="p-2 text-gray-400 hover:text-gray-600 hidden sm:inline-flex"
-              data-testid="button-notifications"
-            >
-              <Bell size={18} />
-            </Button>
+            <NotificationBell className="hidden sm:inline-flex" />
             
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

@@ -1,4 +1,5 @@
 import { storage } from "../storage";
+import { NotificationService } from "./notificationService";
 import type { 
   VendorAnalytics, 
   Alert, 
@@ -580,10 +581,167 @@ export class AlertService {
   }
 
   /**
-   * Create and store alert
+   * Create and store alert, and create corresponding notification
    */
   private static async createAlert(alertData: Omit<InsertAlert, 'id' | 'createdAt' | 'timeBucket'>): Promise<Alert> {
-    return await storage.createAlert(alertData);
+    try {
+      // Create the alert in the database
+      const alert = await storage.createAlert(alertData);
+      
+      // Create a notification for the alert asynchronously (don't block alert creation)
+      this.createNotificationForAlert(alert).catch(error => {
+        console.error(`Failed to create notification for alert ${alert.id}:`, error);
+      });
+      
+      return alert;
+    } catch (error) {
+      console.error('Error creating alert:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a notification for a generated alert
+   */
+  private static async createNotificationForAlert(alert: Alert): Promise<void> {
+    try {
+      // Don't create notifications for demo mode alerts
+      if (alert.userId === 'demo_user' || alert.storeId === 'demo_store_1') {
+        return;
+      }
+
+      // Get vendor information for better notification content
+      let vendorName = 'Unknown Vendor';
+      if (alert.vendorId) {
+        try {
+          const vendor = await storage.getVendor(alert.vendorId);
+          if (vendor) {
+            vendorName = vendor.name;
+          }
+        } catch (error) {
+          console.error(`Error fetching vendor ${alert.vendorId}:`, error);
+        }
+      }
+
+      // Generate notification title and enhanced message
+      const { title, enhancedMessage } = this.generateNotificationContent(alert, vendorName);
+
+      // Create the notification
+      await NotificationService.createNotification(
+        alert.userId,
+        alert.storeId,
+        {
+          alertId: alert.id,
+          type: 'alert',
+          title,
+          message: enhancedMessage,
+          severity: alert.severity,
+          actionUrl: `/alerts?alertId=${alert.id}`,
+          metadata: {
+            alertType: alert.alertType,
+            vendorId: alert.vendorId,
+            vendorName,
+            thresholdValue: alert.thresholdValue,
+            currentValue: alert.currentValue
+          }
+        },
+        {
+          alert,
+          sendEmail: alert.severity === 'high', // Send email for critical alerts
+          emailTemplate: alert.severity === 'high' ? 'critical_alert' : 'default_alert'
+        }
+      );
+
+      console.log(`Created notification for alert ${alert.id} (${alert.severity} severity)`);
+    } catch (error) {
+      console.error(`Error creating notification for alert ${alert.id}:`, error);
+      // Don't throw error to avoid breaking alert creation
+    }
+  }
+
+  /**
+   * Generate notification content based on alert data
+   */
+  private static generateNotificationContent(alert: Alert, vendorName: string): { title: string; enhancedMessage: string } {
+    const alertTypeMap = {
+      performance_drop: {
+        title: 'Performance Drop Alert',
+        emoji: '📉',
+        urgency: alert.severity === 'high' ? 'Critical' : 'Important'
+      },
+      performance_spike: {
+        title: 'Performance Spike Alert',
+        emoji: '📈',
+        urgency: 'Notable'
+      },
+      inventory_low: {
+        title: 'Low Inventory Alert',
+        emoji: '📦',
+        urgency: alert.severity === 'high' ? 'Critical' : 'Important'
+      },
+      sales_trend: {
+        title: 'Sales Trend Alert',
+        emoji: '📊',
+        urgency: 'Notable'
+      }
+    };
+
+    const config = alertTypeMap[alert.alertType] || {
+      title: 'Business Alert',
+      emoji: '🔔',
+      urgency: 'Important'
+    };
+
+    const title = `${config.emoji} ${config.title}`;
+    
+    // Enhance the message with more context
+    let enhancedMessage = alert.message;
+    
+    if (alert.severity === 'high') {
+      enhancedMessage = `🚨 ${config.urgency}: ${enhancedMessage}`;
+    } else if (alert.severity === 'medium') {
+      enhancedMessage = `⚠️ ${config.urgency}: ${enhancedMessage}`;
+    } else {
+      enhancedMessage = `ℹ️ ${config.urgency}: ${enhancedMessage}`;
+    }
+
+    // Add action guidance
+    const actionGuidance = this.getActionGuidance(alert.alertType, alert.severity);
+    if (actionGuidance) {
+      enhancedMessage += ` ${actionGuidance}`;
+    }
+
+    return { title, enhancedMessage };
+  }
+
+  /**
+   * Get action guidance based on alert type and severity
+   */
+  private static getActionGuidance(alertType: string, severity: string): string {
+    const actionMap = {
+      performance_drop: {
+        high: 'Immediate review recommended.',
+        medium: 'Consider investigating causes.',
+        low: 'Monitor for continued trends.'
+      },
+      performance_spike: {
+        high: 'Great opportunity to capitalize!',
+        medium: 'Consider increasing inventory.',
+        low: 'Positive trend to monitor.'
+      },
+      inventory_low: {
+        high: 'Restock immediately to avoid stockouts.',
+        medium: 'Consider reordering soon.',
+        low: 'Plan for upcoming restock.'
+      },
+      sales_trend: {
+        high: 'Significant trend detected.',
+        medium: 'Trend worth monitoring.',
+        low: 'Minor trend observed.'
+      }
+    };
+
+    return actionMap[alertType]?.[severity] || '';
   }
 
   /**
