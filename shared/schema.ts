@@ -452,6 +452,7 @@ export const insertForecastAccuracySchema = createInsertSchema(forecastAccuracy)
   recordedAt: true,
 });
 
+
 // Types
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
@@ -506,6 +507,16 @@ export type InsertSalesForecast = z.infer<typeof insertSalesForecastSchema>;
 
 export type ForecastAccuracy = typeof forecastAccuracy.$inferSelect;
 export type InsertForecastAccuracy = z.infer<typeof insertForecastAccuracySchema>;
+
+// Notification system types
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+
+export type NotificationPreferences = typeof notificationPreferences.$inferSelect;
+export type InsertNotificationPreferences = z.infer<typeof insertNotificationPreferencesSchema>;
+
+export type EmailQueue = typeof emailQueue.$inferSelect;
+export type InsertEmailQueue = z.infer<typeof insertEmailQueueSchema>;
 
 // Pagination types
 export interface PaginationParams {
@@ -575,6 +586,119 @@ export const SUBSCRIPTION_STATUS = {
 } as const;
 
 export type SubscriptionStatus = typeof SUBSCRIPTION_STATUS[keyof typeof SUBSCRIPTION_STATUS];
+
+// ============= NOTIFICATION SYSTEM =============
+
+// Notification types
+export const notificationTypeEnum = pgEnum('notification_type', ['alert', 'system', 'marketing']);
+export const emailFrequencyEnum = pgEnum('email_frequency', ['immediate', 'hourly', 'daily', 'weekly', 'never']);
+export const emailStatusEnum = pgEnum('email_status', ['pending', 'sending', 'sent', 'failed', 'retry']);
+
+// In-app notifications
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  storeId: varchar("store_id").notNull().references(() => stores.id),
+  alertId: varchar("alert_id").references(() => alerts.id), // Link to original alert if applicable
+  type: notificationTypeEnum("type").notNull().default('alert'),
+  title: varchar("title").notNull(),
+  message: text("message").notNull(),
+  severity: severityEnum("severity").notNull(),
+  isRead: boolean("is_read").default(false),
+  dismissedAt: timestamp("dismissed_at"),
+  actionUrl: varchar("action_url"), // Link to relevant page
+  metadata: jsonb("metadata"), // Additional data for the notification
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("IDX_notifications_user_id").on(table.userId),
+  index("IDX_notifications_store_id").on(table.storeId),
+  index("IDX_notifications_alert_id").on(table.alertId),
+  index("IDX_notifications_is_read").on(table.isRead),
+  index("IDX_notifications_created_at").on(table.createdAt),
+  index("IDX_notifications_type").on(table.type),
+  index("IDX_notifications_severity").on(table.severity),
+]);
+
+// User notification preferences
+export const notificationPreferences = pgTable("notification_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  storeId: varchar("store_id").notNull().references(() => stores.id),
+  // In-app notification settings
+  enableInAppNotifications: boolean("enable_in_app_notifications").default(true),
+  inAppSeverityFilter: varchar("in_app_severity_filter").array().default(sql`ARRAY['high', 'medium', 'low']`), // Which severities to show
+  // Email notification settings
+  enableEmailNotifications: boolean("enable_email_notifications").default(true),
+  emailAddress: varchar("email_address"),
+  emailFrequency: emailFrequencyEnum("email_frequency").default('immediate'),
+  emailSeverityFilter: varchar("email_severity_filter").array().default(sql`ARRAY['high', 'medium']`), // Which severities to email
+  enableCriticalEmailAlerts: boolean("enable_critical_email_alerts").default(true),
+  enableDailyDigest: boolean("enable_daily_digest").default(false),
+  enableWeeklyDigest: boolean("enable_weekly_digest").default(false),
+  // Do not disturb settings
+  doNotDisturbStart: varchar("do_not_disturb_start"), // Format: "22:00"
+  doNotDisturbEnd: varchar("do_not_disturb_end"), // Format: "08:00"
+  doNotDisturbTimezone: varchar("do_not_disturb_timezone").default('UTC'),
+  // Alert type preferences
+  alertTypePreferences: jsonb("alert_type_preferences").default(sql`'{"performance_drop": true, "performance_spike": true, "inventory_low": true, "sales_trend": true}'`),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("IDX_notification_preferences_user_id").on(table.userId),
+  index("IDX_notification_preferences_store_id").on(table.storeId),
+  unique("notification_preferences_user_store_unique").on(table.userId, table.storeId),
+]);
+
+// Email delivery queue
+export const emailQueue = pgTable("email_queue", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  storeId: varchar("store_id").notNull().references(() => stores.id),
+  notificationId: varchar("notification_id").references(() => notifications.id),
+  alertId: varchar("alert_id").references(() => alerts.id),
+  toEmail: varchar("to_email").notNull(),
+  subject: varchar("subject").notNull(),
+  htmlBody: text("html_body").notNull(),
+  textBody: text("text_body"),
+  emailType: varchar("email_type").notNull(), // 'critical_alert', 'daily_digest', 'weekly_digest', 'alert_resolution'
+  status: emailStatusEnum("status").default('pending'),
+  priority: integer("priority").default(1), // 1 = highest, 5 = lowest
+  scheduledAt: timestamp("scheduled_at").defaultNow(),
+  sentAt: timestamp("sent_at"),
+  failedAt: timestamp("failed_at"),
+  retryCount: integer("retry_count").default(0),
+  maxRetries: integer("max_retries").default(3),
+  errorMessage: text("error_message"),
+  metadata: jsonb("metadata"), // Additional email metadata
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("IDX_email_queue_user_id").on(table.userId),
+  index("IDX_email_queue_store_id").on(table.storeId),
+  index("IDX_email_queue_notification_id").on(table.notificationId),
+  index("IDX_email_queue_alert_id").on(table.alertId),
+  index("IDX_email_queue_status").on(table.status),
+  index("IDX_email_queue_scheduled_at").on(table.scheduledAt),
+  index("IDX_email_queue_priority").on(table.priority),
+  index("IDX_email_queue_email_type").on(table.emailType),
+  index("IDX_email_queue_retry_count").on(table.retryCount),
+]);
+
+// Notification system insert schemas
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertNotificationPreferencesSchema = createInsertSchema(notificationPreferences).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEmailQueueSchema = createInsertSchema(emailQueue).omit({
+  id: true,
+  createdAt: true,
+});
 
 // Vendor metrics for optimized queries
 export interface VendorMetrics {

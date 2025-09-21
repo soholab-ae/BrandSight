@@ -89,6 +89,15 @@ if (app.get('env') === 'development') {
 
 
 (async () => {
+  // Initialize services
+  try {
+    const { EmailService } = await import("./services/emailService");
+    await EmailService.initialize();
+  } catch (error) {
+    console.error('Failed to initialize EmailService:', error);
+    // Don't crash the app, email service will handle gracefully
+  }
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

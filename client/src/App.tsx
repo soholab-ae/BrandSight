@@ -20,6 +20,8 @@ import AlertsPage from "@/pages/alerts";
 import BrandLoyaltyPage from "@/pages/brand-loyalty";
 import InventoryPage from "@/pages/inventory";
 import ForecastingPage from "@/pages/forecasting";
+import NotificationCenterPage from "@/pages/notifications";
+import NotificationPreferencesPage from "@/pages/notification-preferences";
 
 function OnboardingRouter() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
@@ -73,6 +75,8 @@ function OnboardingRouter() {
       <Route path="/" component={Dashboard} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/alerts" component={AlertsPage} />
+      <Route path="/notifications" component={NotificationCenterPage} />
+      <Route path="/notifications/preferences" component={NotificationPreferencesPage} />
       <Route path="/brand-loyalty" component={BrandLoyaltyPage} />
       <Route path="/inventory" component={InventoryPage} />
       <Route path="/forecasting" component={ForecastingPage} />

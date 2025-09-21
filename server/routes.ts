@@ -6,6 +6,7 @@ import { shopifyService } from "./services/shopifyService";
 import { insertStoreSchema, insertAlertSchema, insertAlertRuleSchema } from "@shared/schema";
 import { createBillingSubscription, checkActiveSubscription, cancelSubscription, createPlanEnforcementMiddleware, getPlanRestrictions } from "./shopifyBilling";
 import { AlertService } from "./services/alertService";
+import { NotificationService } from "./services/notificationService";
 import { BrandLoyaltyService } from "./services/brandLoyaltyService";
 import { inventoryService } from "./services/inventoryService";
 import { ForecastingService } from "./services/forecastingService";
@@ -1501,6 +1502,380 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting alert rule:", error);
       res.status(500).json({ message: "Failed to delete alert rule" });
+    }
+  });
+
+  // ============= NOTIFICATION SYSTEM API ENDPOINTS =============
+  
+  // Get notifications for current user with pagination and filtering
+  app.get('/api/notifications', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const userId = getUserId(req);
+      const { page, limit, isRead, severity, type, startDate, endDate, search, sortBy } = req.query;
+      
+      const params = {
+        page: page ? parseInt(page as string) : 1,
+        limit: limit ? parseInt(limit as string) : 20,
+        isRead: isRead === 'true' ? true : isRead === 'false' ? false : undefined,
+        severity: severity as string,
+        type: type as string,
+        startDate: startDate ? new Date(startDate as string) : undefined,
+        endDate: endDate ? new Date(endDate as string) : undefined,
+        search: search as string
+      };
+      
+      const notifications = await NotificationService.getUserNotifications(userId, store.id, params);
+      res.json(notifications);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+      res.status(500).json({ message: "Failed to fetch notifications" });
+    }
+  });
+
+  // Get unread notification count for badge display
+  app.get('/api/notifications/count', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const userId = getUserId(req);
+      
+      const count = await NotificationService.getUnreadCount(userId, store.id);
+      res.json({ count });
+    } catch (error) {
+      console.error("Error fetching notification count:", error);
+      res.status(500).json({ message: "Failed to fetch notification count" });
+    }
+  });
+
+  // Get notification statistics for dashboard
+  app.get('/api/notifications/stats', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const userId = getUserId(req);
+      
+      // For demo mode, return demo stats
+      if (req.isDemoMode || req.user?.isDemoMode) {
+        return res.json({
+          total: 6,
+          unread: 3,
+          critical: 2,
+          today: 1
+        });
+      }
+      
+      // Calculate stats from database
+      const allNotifications = await NotificationService.getUserNotifications(userId, store.id, { page: 1, limit: 1000 });
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const stats = {
+        total: allNotifications.pagination.total,
+        unread: allNotifications.data.filter((n: any) => !n.isRead).length,
+        critical: allNotifications.data.filter((n: any) => n.severity === 'high').length,
+        today: allNotifications.data.filter((n: any) => new Date(n.createdAt) >= today).length
+      };
+      
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching notification stats:", error);
+      res.status(500).json({ message: "Failed to fetch notification stats" });
+    }
+  });
+
+  // Mark notification as read
+  app.post('/api/notifications/:id/read', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const store = await getUserCurrentStore(req);
+      const userId = getUserId(req);
+      
+      // For demo mode, just return success
+      if (req.isDemoMode || req.user?.isDemoMode) {
+        return res.json({ success: true, message: "Notification marked as read (demo mode)" });
+      }
+      
+      const notification = await NotificationService.markAsRead(userId, store.id, id);
+      res.json(notification);
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+      res.status(500).json({ message: "Failed to mark notification as read" });
+    }
+  });
+
+  // Dismiss/delete notification
+  app.delete('/api/notifications/:id', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const store = await getUserCurrentStore(req);
+      const userId = getUserId(req);
+      
+      // For demo mode, just return success
+      if (req.isDemoMode || req.user?.isDemoMode) {
+        return res.json({ success: true, message: "Notification dismissed (demo mode)" });
+      }
+      
+      await NotificationService.dismissNotification(userId, store.id, id);
+      res.json({ success: true, message: "Notification dismissed" });
+    } catch (error) {
+      console.error("Error dismissing notification:", error);
+      res.status(500).json({ message: "Failed to dismiss notification" });
+    }
+  });
+
+  // Mark all notifications as read
+  app.post('/api/notifications/mark-all-read', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const userId = getUserId(req);
+      
+      // For demo mode, just return success
+      if (req.isDemoMode || req.user?.isDemoMode) {
+        return res.json({ success: true, count: 0, message: "All notifications marked as read (demo mode)" });
+      }
+      
+      const count = await NotificationService.markAllAsRead(userId, store.id);
+      res.json({ success: true, count, message: `${count} notifications marked as read` });
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error);
+      res.status(500).json({ message: "Failed to mark all notifications as read" });
+    }
+  });
+
+  // Bulk mark notifications as read
+  app.post('/api/notifications/bulk-read', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const { notificationIds } = req.body;
+      const store = await getUserCurrentStore(req);
+      const userId = getUserId(req);
+      
+      if (!notificationIds || !Array.isArray(notificationIds)) {
+        return res.status(400).json({ message: "notificationIds array is required" });
+      }
+      
+      // For demo mode, just return success
+      if (req.isDemoMode || req.user?.isDemoMode) {
+        return res.json({ 
+          success: true, 
+          count: notificationIds.length, 
+          message: `${notificationIds.length} notifications marked as read (demo mode)` 
+        });
+      }
+      
+      let count = 0;
+      for (const id of notificationIds) {
+        try {
+          await NotificationService.markAsRead(userId, store.id, id);
+          count++;
+        } catch (error) {
+          console.error(`Error marking notification ${id} as read:`, error);
+        }
+      }
+      
+      res.json({ success: true, count, message: `${count} notifications marked as read` });
+    } catch (error) {
+      console.error("Error bulk marking notifications as read:", error);
+      res.status(500).json({ message: "Failed to bulk mark notifications as read" });
+    }
+  });
+
+  // Bulk dismiss notifications
+  app.post('/api/notifications/bulk-dismiss', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const { notificationIds } = req.body;
+      const store = await getUserCurrentStore(req);
+      const userId = getUserId(req);
+      
+      if (!notificationIds || !Array.isArray(notificationIds)) {
+        return res.status(400).json({ message: "notificationIds array is required" });
+      }
+      
+      // For demo mode, just return success
+      if (req.isDemoMode || req.user?.isDemoMode) {
+        return res.json({ 
+          success: true, 
+          count: notificationIds.length, 
+          message: `${notificationIds.length} notifications dismissed (demo mode)` 
+        });
+      }
+      
+      let count = 0;
+      for (const id of notificationIds) {
+        try {
+          await NotificationService.dismissNotification(userId, store.id, id);
+          count++;
+        } catch (error) {
+          console.error(`Error dismissing notification ${id}:`, error);
+        }
+      }
+      
+      res.json({ success: true, count, message: `${count} notifications dismissed` });
+    } catch (error) {
+      console.error("Error bulk dismissing notifications:", error);
+      res.status(500).json({ message: "Failed to bulk dismiss notifications" });
+    }
+  });
+
+  // Get user notification preferences
+  app.get('/api/notifications/preferences', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const userId = getUserId(req);
+      
+      // For demo mode, return demo preferences
+      if (req.isDemoMode || req.user?.isDemoMode) {
+        return res.json({
+          enableInAppNotifications: true,
+          inAppSeverityFilter: ['high', 'medium', 'low'],
+          enableEmailNotifications: true,
+          emailAddress: 'demo@example.com',
+          emailFrequency: 'immediate',
+          emailSeverityFilter: ['high', 'medium'],
+          enableCriticalEmailAlerts: true,
+          enableDailyDigest: false,
+          enableWeeklyDigest: true,
+          doNotDisturbStart: '22:00',
+          doNotDisturbEnd: '08:00',
+          doNotDisturbTimezone: 'America/New_York',
+          alertTypePreferences: {
+            performance_drop: true,
+            performance_spike: true,
+            inventory_low: true,
+            sales_trend: true
+          },
+          soundEnabled: true,
+          desktopNotifications: true,
+          mobileNotifications: true
+        });
+      }
+      
+      const preferences = await NotificationService.getUserPreferences(userId, store.id);
+      res.json(preferences);
+    } catch (error) {
+      console.error("Error fetching notification preferences:", error);
+      res.status(500).json({ message: "Failed to fetch notification preferences" });
+    }
+  });
+
+  // Update user notification preferences
+  app.put('/api/notifications/preferences', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const userId = getUserId(req);
+      const updates = req.body;
+      
+      // For demo mode, just return the submitted preferences
+      if (req.isDemoMode || req.user?.isDemoMode) {
+        return res.json({ 
+          ...updates,
+          success: true, 
+          message: "Preferences updated (demo mode)" 
+        });
+      }
+      
+      const preferences = await NotificationService.updateUserPreferences(userId, store.id, updates);
+      res.json(preferences);
+    } catch (error) {
+      console.error("Error updating notification preferences:", error);
+      res.status(500).json({ message: "Failed to update notification preferences" });
+    }
+  });
+
+  // Test notification endpoints
+  app.post('/api/notifications/test', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const { type } = req.body; // 'email' or 'in-app'
+      const store = await getUserCurrentStore(req);
+      const userId = getUserId(req);
+      
+      if (type === 'email') {
+        // For demo mode, just return success
+        if (req.isDemoMode || req.user?.isDemoMode) {
+          return res.json({ 
+            success: true, 
+            message: "Test email sent successfully (demo mode)" 
+          });
+        }
+        
+        // Create a test email notification
+        const testNotification = await NotificationService.createNotification(
+          userId,
+          store.id,
+          {
+            type: 'system',
+            title: 'Test Email Notification',
+            message: 'This is a test email to verify your notification settings are working correctly.',
+            severity: 'low'
+          },
+          { 
+            sendEmail: true,
+            emailTemplate: 'default_alert'
+          }
+        );
+        
+        res.json({ 
+          success: true, 
+          message: "Test email sent successfully",
+          notificationId: testNotification.id
+        });
+      } else if (type === 'in-app') {
+        // For demo mode, just return success
+        if (req.isDemoMode || req.user?.isDemoMode) {
+          return res.json({ 
+            success: true, 
+            message: "Test in-app notification created successfully (demo mode)" 
+          });
+        }
+        
+        // Create a test in-app notification
+        const testNotification = await NotificationService.createNotification(
+          userId,
+          store.id,
+          {
+            type: 'system',
+            title: 'Test In-App Notification',
+            message: 'This is a test notification to verify your in-app notification settings are working correctly.',
+            severity: 'low'
+          },
+          { 
+            sendEmail: false
+          }
+        );
+        
+        res.json({ 
+          success: true, 
+          message: "Test in-app notification created successfully",
+          notificationId: testNotification.id
+        });
+      } else {
+        res.status(400).json({ message: "Invalid test type. Must be 'email' or 'in-app'" });
+      }
+    } catch (error) {
+      console.error("Error sending test notification:", error);
+      res.status(500).json({ message: "Failed to send test notification" });
+    }
+  });
+
+  // Process email queue manually (for testing/maintenance)
+  app.post('/api/notifications/process-email-queue', authenticateOrDemo, async (req: any, res) => {
+    try {
+      // For demo mode, just return success
+      if (req.isDemoMode || req.user?.isDemoMode) {
+        return res.json({ 
+          success: true, 
+          processed: 0,
+          message: "Email queue processed (demo mode)" 
+        });
+      }
+      
+      const processedCount = await NotificationService.processEmailQueue(10);
+      res.json({ 
+        success: true, 
+        processed: processedCount,
+        message: `${processedCount} emails processed from queue`
+      });
+    } catch (error) {
+      console.error("Error processing email queue:", error);
+      res.status(500).json({ message: "Failed to process email queue" });
     }
   });
 

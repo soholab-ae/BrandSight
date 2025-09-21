@@ -16,6 +16,9 @@ import {
   salesForecasts,
   forecastAccuracy,
   inventory,
+  notifications,
+  notificationPreferences,
+  emailQueue,
   type User,
   type UpsertUser,
   type Store,
@@ -49,6 +52,12 @@ import {
   type InsertForecastAccuracy,
   type Inventory,
   type InsertInventory,
+  type Notification,
+  type InsertNotification,
+  type NotificationPreferences,
+  type InsertNotificationPreferences,
+  type EmailQueue,
+  type InsertEmailQueue,
   type PaginationParams,
   type PaginatedResponse,
   type VendorMetrics,
@@ -160,6 +169,26 @@ export interface IStorage {
   createForecastAccuracy(accuracy: InsertForecastAccuracy): Promise<ForecastAccuracy>;
   getForecastAccuracy(storeId: string, params?: PaginationParams & { vendorId?: string }): Promise<PaginatedResponse<ForecastAccuracy>>;
   getForecastAccuracyMetrics(storeId: string, vendorId?: string): Promise<any>;
+  
+  // ============= NOTIFICATION SYSTEM =============
+  
+  // Notification operations
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  getUserNotifications(userId: string, storeId: string, params?: PaginationParams & { isRead?: boolean; severity?: string; type?: string; startDate?: Date; endDate?: Date }): Promise<PaginatedResponse<Notification>>;
+  getUnreadNotificationCount(userId: string, storeId: string): Promise<number>;
+  markNotificationAsRead(userId: string, storeId: string, notificationId: string): Promise<Notification>;
+  markAllNotificationsAsRead(userId: string, storeId: string): Promise<number>;
+  deleteNotification(userId: string, storeId: string, notificationId: string): Promise<void>;
+  
+  // Notification preferences
+  getNotificationPreferences(userId: string, storeId: string): Promise<NotificationPreferences | undefined>;
+  createNotificationPreferences(preferences: InsertNotificationPreferences): Promise<NotificationPreferences>;
+  updateNotificationPreferences(userId: string, storeId: string, updates: Partial<NotificationPreferences>): Promise<NotificationPreferences>;
+  
+  // Email queue operations
+  createEmailQueue(email: InsertEmailQueue): Promise<EmailQueue>;
+  getPendingEmails(limit?: number): Promise<EmailQueue[]>;
+  updateEmailStatus(emailId: string, status: 'pending' | 'sending' | 'sent' | 'failed' | 'retry', sentAt?: Date): Promise<EmailQueue>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2122,6 +2151,229 @@ export class DatabaseStorage implements IStorage {
         reservedQuantity: 0,
         syncedAt: new Date(),
       });
+    }
+
+    return updated;
+  }
+
+  // ============= NOTIFICATION SYSTEM IMPLEMENTATIONS =============
+
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const [created] = await db
+      .insert(notifications)
+      .values(notification)
+      .returning();
+    return created;
+  }
+
+  async getUserNotifications(
+    userId: string, 
+    storeId: string, 
+    params: PaginationParams & { isRead?: boolean; severity?: string; type?: string; startDate?: Date; endDate?: Date } = {}
+  ): Promise<PaginatedResponse<Notification>> {
+    const { page = 1, limit = 20, isRead, severity, type, startDate, endDate } = params;
+    const offset = (page - 1) * limit;
+
+    let whereConditions = [
+      eq(notifications.userId, userId),
+      eq(notifications.storeId, storeId)
+    ];
+
+    if (typeof isRead === 'boolean') {
+      whereConditions.push(eq(notifications.isRead, isRead));
+    }
+    if (severity) {
+      whereConditions.push(eq(notifications.severity, severity as any));
+    }
+    if (type) {
+      whereConditions.push(eq(notifications.type, type as any));
+    }
+    if (startDate) {
+      whereConditions.push(gte(notifications.createdAt, startDate));
+    }
+    if (endDate) {
+      whereConditions.push(lte(notifications.createdAt, endDate));
+    }
+
+    const [data, totalResult] = await Promise.all([
+      db
+        .select()
+        .from(notifications)
+        .where(and(...whereConditions))
+        .orderBy(desc(notifications.createdAt))
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(notifications)
+        .where(and(...whereConditions))
+    ]);
+
+    const total = totalResult[0]?.count || 0;
+
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: page * limit < total,
+        hasPrev: page > 1
+      }
+    };
+  }
+
+  async getUnreadNotificationCount(userId: string, storeId: string): Promise<number> {
+    const [result] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, userId),
+          eq(notifications.storeId, storeId),
+          eq(notifications.isRead, false)
+        )
+      );
+    
+    return result?.count || 0;
+  }
+
+  async markNotificationAsRead(userId: string, storeId: string, notificationId: string): Promise<Notification> {
+    const [updated] = await db
+      .update(notifications)
+      .set({ isRead: true })
+      .where(
+        and(
+          eq(notifications.id, notificationId),
+          eq(notifications.userId, userId),
+          eq(notifications.storeId, storeId)
+        )
+      )
+      .returning();
+
+    if (!updated) {
+      throw new Error('Notification not found');
+    }
+
+    return updated;
+  }
+
+  async markAllNotificationsAsRead(userId: string, storeId: string): Promise<number> {
+    const result = await db
+      .update(notifications)
+      .set({ isRead: true })
+      .where(
+        and(
+          eq(notifications.userId, userId),
+          eq(notifications.storeId, storeId),
+          eq(notifications.isRead, false)
+        )
+      );
+
+    return result.rowCount || 0;
+  }
+
+  async deleteNotification(userId: string, storeId: string, notificationId: string): Promise<void> {
+    const result = await db
+      .delete(notifications)
+      .where(
+        and(
+          eq(notifications.id, notificationId),
+          eq(notifications.userId, userId),
+          eq(notifications.storeId, storeId)
+        )
+      );
+
+    if (result.rowCount === 0) {
+      throw new Error('Notification not found');
+    }
+  }
+
+  async getNotificationPreferences(userId: string, storeId: string): Promise<NotificationPreferences | undefined> {
+    const [preferences] = await db
+      .select()
+      .from(notificationPreferences)
+      .where(
+        and(
+          eq(notificationPreferences.userId, userId),
+          eq(notificationPreferences.storeId, storeId)
+        )
+      )
+      .limit(1);
+
+    return preferences;
+  }
+
+  async createNotificationPreferences(preferences: InsertNotificationPreferences): Promise<NotificationPreferences> {
+    const [created] = await db
+      .insert(notificationPreferences)
+      .values(preferences)
+      .returning();
+    return created;
+  }
+
+  async updateNotificationPreferences(
+    userId: string, 
+    storeId: string, 
+    updates: Partial<NotificationPreferences>
+  ): Promise<NotificationPreferences> {
+    const [updated] = await db
+      .update(notificationPreferences)
+      .set({
+        ...updates,
+        updatedAt: sql`NOW()`
+      })
+      .where(
+        and(
+          eq(notificationPreferences.userId, userId),
+          eq(notificationPreferences.storeId, storeId)
+        )
+      )
+      .returning();
+
+    if (!updated) {
+      throw new Error('Notification preferences not found');
+    }
+
+    return updated;
+  }
+
+  async createEmailQueue(email: InsertEmailQueue): Promise<EmailQueue> {
+    const [created] = await db
+      .insert(emailQueue)
+      .values(email)
+      .returning();
+    return created;
+  }
+
+  async getPendingEmails(limit: number = 50): Promise<EmailQueue[]> {
+    return await db
+      .select()
+      .from(emailQueue)
+      .where(eq(emailQueue.status, 'pending'))
+      .orderBy(asc(emailQueue.priority), asc(emailQueue.scheduledAt))
+      .limit(limit);
+  }
+
+  async updateEmailStatus(
+    emailId: string, 
+    status: 'pending' | 'sending' | 'sent' | 'failed' | 'retry', 
+    sentAt?: Date
+  ): Promise<EmailQueue> {
+    const updateData: any = { status };
+    if (sentAt) {
+      updateData.sentAt = sentAt;
+    }
+
+    const [updated] = await db
+      .update(emailQueue)
+      .set(updateData)
+      .where(eq(emailQueue.id, emailId))
+      .returning();
+
+    if (!updated) {
+      throw new Error('Email queue item not found');
     }
 
     return updated;
