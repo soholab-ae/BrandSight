@@ -27,7 +27,8 @@ import {
   DollarSign,
   BarChart3,
   Target,
-  Clock
+  Clock,
+  X
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -401,11 +402,11 @@ export default function InventoryPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Vendors</SelectItem>
-                      {vendors?.map((vendor: any) => (
+                      {(vendors && Array.isArray(vendors)) ? vendors.map((vendor: any) => (
                         <SelectItem key={vendor.id} value={vendor.id}>
                           {vendor.name}
                         </SelectItem>
-                      ))}
+                      )) : null}
                     </SelectContent>
                   </Select>
                 </div>
@@ -454,15 +455,15 @@ export default function InventoryPage() {
             </TabsContent>
             
             <TabsContent value="sell-through" className="mt-6">
-              <SellThroughTab data={sellThroughData} isLoading={sellThroughLoading} />
+              <SellThroughTab data={sellThroughData || []} isLoading={sellThroughLoading} />
             </TabsContent>
             
             <TabsContent value="dead-stock" className="mt-6">
-              <DeadStockTab data={deadStockData} isLoading={deadStockLoading} />
+              <DeadStockTab data={deadStockData || []} isLoading={deadStockLoading} />
             </TabsContent>
             
             <TabsContent value="reorder" className="mt-6">
-              <ReorderTab data={reorderData} isLoading={reorderLoading} />
+              <ReorderTab data={reorderData || []} isLoading={reorderLoading} />
             </TabsContent>
           </Tabs>
         </main>
@@ -473,8 +474,8 @@ export default function InventoryPage() {
 
 // Inventory Overview Tab Component
 interface InventoryOverviewTabProps {
-  overviewData: InventoryOverviewData;
-  profitabilityData: ProfitabilityData[];
+  overviewData?: InventoryOverviewData;
+  profitabilityData?: ProfitabilityData[];
   isLoading: boolean;
 }
 
