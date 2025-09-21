@@ -5,7 +5,9 @@ import type {
   Product, 
   Order,
   OrderLineItem,
-  VendorAnalytics 
+  VendorAnalytics,
+  Inventory,
+  InsertInventory
 } from "@shared/schema";
 
 // Demo store
@@ -24,13 +26,15 @@ export const demoStore: Store = {
   createdAt: new Date('2024-01-01')
 };
 
-// Demo vendors with realistic brand names
+// Demo vendors with realistic brand names and cost/lead time data
 export const demoVendors: Vendor[] = [
   {
     id: "vendor_1",
     storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7",
     name: "Nike",
     slug: "nike",
+    defaultMarginPercentage: "45.00", // Nike typically has higher margins
+    leadTimeDays: 14,
     createdAt: new Date('2024-01-01')
   },
   {
@@ -38,6 +42,8 @@ export const demoVendors: Vendor[] = [
     storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7",
     name: "Adidas",
     slug: "adidas",
+    defaultMarginPercentage: "42.00", // Similar premium brand margin
+    leadTimeDays: 12,
     createdAt: new Date('2024-01-01')
   },
   {
@@ -45,6 +51,8 @@ export const demoVendors: Vendor[] = [
     storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7",
     name: "Under Armour",
     slug: "under-armour",
+    defaultMarginPercentage: "38.00", // Slightly lower margin
+    leadTimeDays: 10,
     createdAt: new Date('2024-01-01')
   },
   {
@@ -52,6 +60,8 @@ export const demoVendors: Vendor[] = [
     storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7",
     name: "Puma",
     slug: "puma",
+    defaultMarginPercentage: "40.00", // Mid-range margin
+    leadTimeDays: 12,
     createdAt: new Date('2024-01-01')
   },
   {
@@ -59,13 +69,15 @@ export const demoVendors: Vendor[] = [
     storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7",
     name: "New Balance",
     slug: "new-balance",
+    defaultMarginPercentage: "35.00", // More competitive pricing
+    leadTimeDays: 8,
     createdAt: new Date('2024-01-01')
   }
 ];
 
 // Demo products with vendor references
 export const demoProducts: Product[] = [
-  // Nike products
+  // Nike products - demonstrates different cost hierarchy scenarios
   {
     id: "prod_nike_1",
     storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7",
@@ -76,6 +88,8 @@ export const demoProducts: Product[] = [
     productType: "Sneakers",
     price: "119.99",
     compareAtPrice: "149.99",
+    cost: "65.99", // Actual cost (highest priority in hierarchy)
+    marginPercentage: null, // Not needed when actual cost is available
     status: "active",
     createdAt: new Date('2024-01-15'),
     updatedAt: new Date('2024-12-01')
@@ -416,6 +430,44 @@ export function generateVendorAnalytics(): VendorAnalytics[] {
 }
 
 export const demoVendorAnalytics = generateVendorAnalytics();
+
+// Demo inventory data - realistic stock levels for demo products
+export const demoInventory: InsertInventory[] = [
+  // Nike products
+  { productId: "prod_nike_1", storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7", vendorId: "vendor_1", quantity: 145, availableQuantity: 145, reservedQuantity: 0, syncedAt: new Date() },
+  { productId: "prod_nike_2", storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7", vendorId: "vendor_1", quantity: 89, availableQuantity: 89, reservedQuantity: 0, syncedAt: new Date() },
+  { productId: "prod_nike_3", storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7", vendorId: "vendor_1", quantity: 67, availableQuantity: 67, reservedQuantity: 0, syncedAt: new Date() },
+  { productId: "prod_nike_4", storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7", vendorId: "vendor_1", quantity: 203, availableQuantity: 203, reservedQuantity: 0, syncedAt: new Date() },
+  { productId: "prod_nike_5", storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7", vendorId: "vendor_1", quantity: 12, availableQuantity: 12, reservedQuantity: 0, syncedAt: new Date() }, // Low stock
+  
+  // Adidas products
+  { productId: "prod_adidas_1", storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7", vendorId: "vendor_2", quantity: 178, availableQuantity: 178, reservedQuantity: 0, syncedAt: new Date() },
+  { productId: "prod_adidas_2", storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7", vendorId: "vendor_2", quantity: 234, availableQuantity: 234, reservedQuantity: 0, syncedAt: new Date() },
+  { productId: "prod_adidas_3", storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7", vendorId: "vendor_2", quantity: 56, availableQuantity: 56, reservedQuantity: 0, syncedAt: new Date() },
+  { productId: "prod_adidas_4", storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7", vendorId: "vendor_2", quantity: 156, availableQuantity: 156, reservedQuantity: 0, syncedAt: new Date() },
+  { productId: "prod_adidas_5", storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7", vendorId: "vendor_2", quantity: 8, availableQuantity: 8, reservedQuantity: 0, syncedAt: new Date() }, // Critical stock
+  
+  // Under Armour products  
+  { productId: "prod_ua_1", storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7", vendorId: "vendor_3", quantity: 98, availableQuantity: 98, reservedQuantity: 0, syncedAt: new Date() },
+  { productId: "prod_ua_2", storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7", vendorId: "vendor_3", quantity: 167, availableQuantity: 167, reservedQuantity: 0, syncedAt: new Date() },
+  { productId: "prod_ua_3", storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7", vendorId: "vendor_3", quantity: 45, availableQuantity: 45, reservedQuantity: 0, syncedAt: new Date() },
+  { productId: "prod_ua_4", storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7", vendorId: "vendor_3", quantity: 189, availableQuantity: 189, reservedQuantity: 0, syncedAt: new Date() },
+  { productId: "prod_ua_5", storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7", vendorId: "vendor_3", quantity: 234, availableQuantity: 234, reservedQuantity: 0, syncedAt: new Date() },
+  
+  // Puma products
+  { productId: "prod_puma_1", storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7", vendorId: "vendor_4", quantity: 123, availableQuantity: 123, reservedQuantity: 0, syncedAt: new Date() },
+  { productId: "prod_puma_2", storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7", vendorId: "vendor_4", quantity: 78, availableQuantity: 78, reservedQuantity: 0, syncedAt: new Date() },
+  { productId: "prod_puma_3", storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7", vendorId: "vendor_4", quantity: 145, availableQuantity: 145, reservedQuantity: 0, syncedAt: new Date() },
+  { productId: "prod_puma_4", storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7", vendorId: "vendor_4", quantity: 267, availableQuantity: 267, reservedQuantity: 0, syncedAt: new Date() },
+  { productId: "prod_puma_5", storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7", vendorId: "vendor_4", quantity: 34, availableQuantity: 34, reservedQuantity: 0, syncedAt: new Date() },
+  
+  // New Balance products
+  { productId: "prod_nb_1", storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7", vendorId: "vendor_5", quantity: 87, availableQuantity: 87, reservedQuantity: 0, syncedAt: new Date() },
+  { productId: "prod_nb_2", storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7", vendorId: "vendor_5", quantity: 156, availableQuantity: 156, reservedQuantity: 0, syncedAt: new Date() },
+  { productId: "prod_nb_3", storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7", vendorId: "vendor_5", quantity: 223, availableQuantity: 223, reservedQuantity: 0, syncedAt: new Date() },
+  { productId: "prod_nb_4", storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7", vendorId: "vendor_5", quantity: 111, availableQuantity: 111, reservedQuantity: 0, syncedAt: new Date() },
+  { productId: "prod_nb_5", storeId: "c15b4e68-ea15-4036-a5f7-cdce20d2baa7", vendorId: "vendor_5", quantity: 5, availableQuantity: 5, reservedQuantity: 0, syncedAt: new Date() }, // Critical stock
+];
 
 // Helper to check if we're in demo mode
 export function isDemoMode(userId?: string): boolean {

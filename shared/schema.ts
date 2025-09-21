@@ -64,6 +64,9 @@ export const vendors = pgTable("vendors", {
   storeId: varchar("store_id").notNull().references(() => stores.id),
   name: varchar("name").notNull(),
   slug: varchar("slug").notNull(),
+  // Cost and inventory management fields
+  defaultMarginPercentage: decimal("default_margin_percentage", { precision: 5, scale: 2 }), // Default margin for this vendor's products
+  leadTimeDays: integer("lead_time_days").default(14), // Lead time in days for this vendor
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("IDX_vendors_store_id").on(table.storeId),
@@ -80,12 +83,33 @@ export const products = pgTable("products", {
   productType: varchar("product_type"),
   price: decimal("price", { precision: 10, scale: 2 }),
   compareAtPrice: decimal("compare_at_price", { precision: 10, scale: 2 }),
+  // Cost fields for accurate profitability analysis
+  cost: decimal("cost", { precision: 10, scale: 2 }), // Actual product cost
+  marginPercentage: decimal("margin_percentage", { precision: 5, scale: 2 }), // Vendor-specific margin if cost not available
   status: varchar("status"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
   index("IDX_products_store_id").on(table.storeId),
   index("IDX_products_vendor_id").on(table.vendorId),
+]);
+
+// Inventory tracking for real-time stock levels
+export const inventory = pgTable("inventory", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  productId: varchar("product_id").notNull().references(() => products.id),
+  storeId: varchar("store_id").notNull().references(() => stores.id),
+  vendorId: varchar("vendor_id").references(() => vendors.id),
+  quantity: integer("quantity").notNull().default(0),
+  availableQuantity: integer("available_quantity").notNull().default(0),
+  reservedQuantity: integer("reserved_quantity").notNull().default(0),
+  lastUpdated: timestamp("last_updated").defaultNow(),
+  syncedAt: timestamp("synced_at"),
+}, (table) => [
+  index("IDX_inventory_product_id").on(table.productId),
+  index("IDX_inventory_store_id").on(table.storeId),
+  index("IDX_inventory_vendor_id").on(table.vendorId),
+  unique("UQ_inventory_product").on(table.productId), // One inventory record per product
 ]);
 
 // Orders
@@ -408,6 +432,11 @@ export const insertInventoryAnalyticsSchema = createInsertSchema(inventoryAnalyt
   updatedAt: true,
 });
 
+export const insertInventorySchema = createInsertSchema(inventory).omit({
+  id: true,
+  lastUpdated: true,
+});
+
 export const insertVendorInventorySummarySchema = createInsertSchema(vendorInventorySummary).omit({
   id: true,
   createdAt: true,
@@ -465,6 +494,9 @@ export type InsertCustomerCrossBrandPurchases = z.infer<typeof insertCustomerCro
 
 export type InventoryAnalytics = typeof inventoryAnalytics.$inferSelect;
 export type InsertInventoryAnalytics = z.infer<typeof insertInventoryAnalyticsSchema>;
+
+export type Inventory = typeof inventory.$inferSelect;
+export type InsertInventory = z.infer<typeof insertInventorySchema>;
 
 export type VendorInventorySummary = typeof vendorInventorySummary.$inferSelect;
 export type InsertVendorInventorySummary = z.infer<typeof insertVendorInventorySummarySchema>;

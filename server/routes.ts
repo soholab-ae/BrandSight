@@ -7,6 +7,7 @@ import { insertStoreSchema, insertAlertSchema, insertAlertRuleSchema } from "@sh
 import { createBillingSubscription, checkActiveSubscription, cancelSubscription, createPlanEnforcementMiddleware, getPlanRestrictions } from "./shopifyBilling";
 import { AlertService } from "./services/alertService";
 import { BrandLoyaltyService } from "./services/brandLoyaltyService";
+import { inventoryService } from "./services/inventoryService";
 import { cacheService, CacheKeyBuilder } from "./services/cacheService";
 import * as csv from 'fast-csv';
 import * as XLSX from 'xlsx';
@@ -229,21 +230,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Flexible authentication that allows demo mode
   const authenticateOrDemo = (req: any, res: any, next: any) => {
-    // Check if user is authenticated
+    // Check if we already have authentication from session/cookies
     const userId = getUserId(req);
     
-    // If authenticated normally, proceed
-    if (userId) {
-      next();
-    } else {
-      // Not authenticated - enable demo mode
-      req.isDemoMode = true;
-      req.user = { 
-        claims: { sub: 'demo_user' },
-        isDemoMode: true 
-      };
-      next();
+    if (userId && userId !== 'demo_user') {
+      // User is properly authenticated, proceed normally
+      return next();
     }
+    
+    // No valid authentication found, enable demo mode
+    console.log('[AUTH] No authentication found, enabling demo mode');
+    req.isDemoMode = true;
+    req.user = { 
+      claims: { sub: 'demo_user' },
+      isDemoMode: true 
+    };
+    
+    // Also set additional demo flags that planEnforcement looks for
+    req.demoMode = true;
+    
+    next();
   };
   
   // Helper to get user ID from either auth system
@@ -1723,6 +1729,182 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error generating demo data:", error);
       res.status(500).json({ message: "Failed to generate demo data" });
+    }
+  });
+
+  // ============= INVENTORY INTELLIGENCE ENDPOINTS =============
+
+  // Get sell-through rates by vendor with filtering and time periods
+  app.get('/api/inventory/sell-through', authenticateOrDemo, planEnforcement, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const userId = getUserId(req);
+      const { vendorId, period = 30 } = req.query;
+      
+      const sellThroughAnalysis = await inventoryService.getSellThroughAnalysis(
+        store.id,
+        vendorId as string,
+        parseInt(period as string),
+        userId
+      );
+      
+      res.json({
+        storeId: store.id,
+        analysisDate: new Date().toISOString(),
+        period: parseInt(period as string),
+        vendorId: vendorId || null,
+        sellThroughData: sellThroughAnalysis
+      });
+    } catch (error) {
+      console.error("Error fetching sell-through analysis:", error);
+      res.status(500).json({ message: "Failed to fetch sell-through analysis" });
+    }
+  });
+
+  // Get dead stock analysis with value calculations
+  app.get('/api/inventory/dead-stock', authenticateOrDemo, planEnforcement, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const userId = getUserId(req);
+      const { vendorId, deadStockPeriod = 90 } = req.query;
+      
+      const deadStockAnalysis = await inventoryService.getDeadStockAnalysis(
+        store.id,
+        vendorId as string,
+        parseInt(deadStockPeriod as string),
+        userId
+      );
+      
+      res.json({
+        storeId: store.id,
+        analysisDate: new Date().toISOString(),
+        deadStockPeriod: parseInt(deadStockPeriod as string),
+        vendorId: vendorId || null,
+        deadStockData: deadStockAnalysis
+      });
+    } catch (error) {
+      console.error("Error fetching dead stock analysis:", error);
+      res.status(500).json({ message: "Failed to fetch dead stock analysis" });
+    }
+  });
+
+  // Get reorder point recommendations by vendor
+  app.get('/api/inventory/reorder-recommendations', authenticateOrDemo, planEnforcement, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const userId = getUserId(req);
+      const { vendorId } = req.query;
+      
+      const reorderRecommendations = await inventoryService.getReorderRecommendations(
+        store.id,
+        vendorId as string,
+        userId
+      );
+      
+      res.json({
+        storeId: store.id,
+        analysisDate: new Date().toISOString(),
+        vendorId: vendorId || null,
+        reorderRecommendations: reorderRecommendations
+      });
+    } catch (error) {
+      console.error("Error fetching reorder recommendations:", error);
+      res.status(500).json({ message: "Failed to fetch reorder recommendations" });
+    }
+  });
+
+  // Get inventory profitability analysis and metrics
+  app.get('/api/inventory/profitability', authenticateOrDemo, planEnforcement, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const userId = getUserId(req);
+      const { vendorId } = req.query;
+      
+      const profitabilityAnalysis = await inventoryService.getProfitabilityAnalysis(
+        store.id,
+        vendorId as string,
+        userId
+      );
+      
+      res.json({
+        storeId: store.id,
+        analysisDate: new Date().toISOString(),
+        vendorId: vendorId || null,
+        profitabilityData: profitabilityAnalysis
+      });
+    } catch (error) {
+      console.error("Error fetching profitability analysis:", error);
+      res.status(500).json({ message: "Failed to fetch profitability analysis" });
+    }
+  });
+
+  // Update inventory analytics (for processing new data)
+  app.post('/api/inventory/update', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const userId = getUserId(req);
+      
+      const updateResults = await inventoryService.updateInventoryAnalytics(store.id, userId);
+      
+      res.json({
+        message: "Inventory analytics updated successfully",
+        storeId: store.id,
+        processed: updateResults.processed,
+        updated: updateResults.updated,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Error updating inventory analytics:", error);
+      res.status(500).json({ message: "Failed to update inventory analytics" });
+    }
+  });
+
+  // Get inventory overview/summary for dashboard
+  app.get('/api/inventory/overview', authenticateOrDemo, planEnforcement, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      
+      const userId = getUserId(req);
+      
+      // Get summary data from multiple analyses - optimized with parallel execution
+      const [
+        sellThroughData,
+        deadStockData,
+        reorderData,
+        profitabilityData
+      ] = await Promise.all([
+        inventoryService.getSellThroughAnalysis(store.id, undefined, undefined, userId),
+        inventoryService.getDeadStockAnalysis(store.id, undefined, undefined, userId),
+        inventoryService.getReorderRecommendations(store.id, undefined, userId),
+        inventoryService.getProfitabilityAnalysis(store.id, undefined, userId)
+      ]);
+
+      // Calculate aggregate metrics
+      const totalVendors = sellThroughData.length;
+      const totalDeadStockValue = deadStockData.reduce((sum, vendor) => sum + vendor.totalDeadStockValue, 0);
+      const criticalReorders = reorderData.filter(item => item.urgency === 'critical').length;
+      const avgProfitabilityScore = profitabilityData.length > 0 
+        ? profitabilityData.reduce((sum, vendor) => sum + vendor.profitabilityScore, 0) / profitabilityData.length 
+        : 0;
+
+      res.json({
+        storeId: store.id,
+        analysisDate: new Date().toISOString(),
+        overview: {
+          totalVendors,
+          totalDeadStockValue,
+          criticalReorders,
+          avgProfitabilityScore
+        },
+        topIssues: {
+          highestDeadStock: deadStockData.sort((a, b) => b.deadStockPercentage - a.deadStockPercentage).slice(0, 3),
+          criticalReorders: reorderData.filter(item => item.urgency === 'critical').slice(0, 5),
+          lowestProfitability: profitabilityData.sort((a, b) => a.profitabilityScore - b.profitabilityScore).slice(0, 3)
+        }
+      });
+    } catch (error) {
+      console.error("Error fetching inventory overview:", error);
+      res.status(500).json({ message: "Failed to fetch inventory overview" });
     }
   });
 
