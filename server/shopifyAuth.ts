@@ -822,7 +822,8 @@ export async function setupShopifyAuth(app: Express) {
         req.path.startsWith('/api/alert-rules') ||
         req.path.startsWith('/api/cache/') ||
         req.path.startsWith('/api/brand-loyalty') ||
-        req.path.startsWith('/api/inventory')) {
+        req.path.startsWith('/api/inventory') ||
+        req.path.startsWith('/api/forecasts')) {
       return next();
     }
     
