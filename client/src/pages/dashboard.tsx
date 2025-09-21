@@ -7,9 +7,14 @@ import Sidebar from "@/components/Sidebar";
 import DateRangePicker from "@/components/DateRangePicker";
 import MetricsGrid from "@/components/MetricsGrid";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { RefreshCw, Download, InfoIcon } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { RefreshCw, Download, InfoIcon, AlertTriangle, Heart, TrendingUp, Brain, CheckCircle, ArrowRight, Target, Zap } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
+import { format } from "date-fns";
 
 // Lazy-loaded components for progressive loading
 import {
@@ -49,6 +54,42 @@ export default function Dashboard() {
   });
 
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Phase 1 Data Fetching for Dashboard Integration
+  // Fetch recent alerts for AlertsSummary
+  const { data: alertsData } = useQuery({
+    queryKey: ['/api/alerts', { limit: 5, severity: 'high' }],
+    enabled: isAuthenticated,
+    initialData: isDemoMode ? { data: getDemoAlertsData() } : undefined
+  });
+
+  // Fetch brand loyalty data for TopPerformingBrands
+  const { data: loyaltyData } = useQuery({
+    queryKey: ['/api/brand-loyalty/affinity'],
+    enabled: isAuthenticated,
+    initialData: isDemoMode ? getDemoBrandLoyaltyData() : undefined
+  });
+
+  // Fetch forecasting data for predictions
+  const { data: forecastingData } = useQuery({
+    queryKey: ['/api/forecasts/sales', { period: 30 }],
+    enabled: isAuthenticated,
+    initialData: isDemoMode ? { data: getDemoForecastingData(), summary: getDemoForecastingSummary() } : undefined
+  });
+
+  // Fetch inventory overview for QuickStats
+  const { data: inventoryData } = useQuery({
+    queryKey: ['/api/inventory/overview'],
+    enabled: isAuthenticated,
+    initialData: isDemoMode ? getDemoInventoryData() : undefined
+  });
+
+  // Fetch alert statistics for QuickStats
+  const { data: alertStatsData } = useQuery({
+    queryKey: ['/api/alerts/stats'],
+    enabled: isAuthenticated,
+    initialData: isDemoMode ? getDemoAlertStatsData() : undefined
+  });
 
   // Redirect to home if not authenticated
   useEffect(() => {
@@ -181,6 +222,45 @@ export default function Dashboard() {
           {/* Key Metrics Cards - Load immediately for key metrics */}
           <MetricsGrid />
 
+          {/* Phase 1 Enhanced Metrics - BrandSight Intelligence */}
+          <div className="mb-6 sm:mb-8">
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">BrandSight Intelligence</h3>
+              <p className="text-gray-600">AI-powered insights across all business areas</p>
+            </div>
+            <PhaseOneQuickStats 
+              alertsData={alertStatsData}
+              loyaltyData={loyaltyData}
+              inventoryData={inventoryData}
+              forecastingData={forecastingData?.summary}
+            />
+          </div>
+
+          {/* Critical Alerts Summary */}
+          {alertsData?.data && alertsData.data.length > 0 && (
+            <div className="mb-6 sm:mb-8">
+              <AlertsSummaryDashboard alerts={alertsData.data} />
+            </div>
+          )}
+
+          {/* Top Performing Brands */}
+          <div className="mb-6 sm:mb-8">
+            <TopPerformingBrandsDashboard 
+              loyaltyData={loyaltyData}
+              forecastingData={forecastingData?.data}
+            />
+          </div>
+
+          {/* Actionable Insights */}
+          <div className="mb-6 sm:mb-8">
+            <ActionableInsightsDashboard 
+              alertsData={alertsData?.data}
+              loyaltyData={loyaltyData}
+              inventoryData={inventoryData}
+              forecastingData={forecastingData?.data}
+            />
+          </div>
+
           {/* Interactive Performance Chart - Progressive loading */}
           <div className="mb-6 sm:mb-8">
             <LazyWrapper 
@@ -246,4 +326,446 @@ export default function Dashboard() {
       </div>
     </div>
   );
+}
+
+// Phase 1 Dashboard Components
+
+// Enhanced QuickStats Component
+interface PhaseOneQuickStatsProps {
+  alertsData: any;
+  loyaltyData: any;
+  inventoryData: any;
+  forecastingData: any;
+}
+
+function PhaseOneQuickStats({ alertsData, loyaltyData, inventoryData, forecastingData }: PhaseOneQuickStatsProps) {
+  const quickStats = [
+    {
+      title: "Active Alerts",
+      value: alertsData?.activeAlerts || 0,
+      icon: AlertTriangle,
+      color: "text-red-600",
+      bgColor: "bg-red-50",
+      link: "/alerts"
+    },
+    {
+      title: "Avg Loyalty Score",
+      value: loyaltyData ? (loyaltyData.reduce((sum: number, item: any) => sum + item.affinityScore, 0) / loyaltyData.length).toFixed(1) : "0.0",
+      icon: Heart,
+      color: "text-pink-600",
+      bgColor: "bg-pink-50",
+      link: "/brand-loyalty"
+    },
+    {
+      title: "Inventory Value",
+      value: inventoryData?.totalInventoryValue ? `$${(inventoryData.totalInventoryValue / 1000).toFixed(0)}K` : "$0",
+      icon: Target,
+      color: "text-blue-600",
+      bgColor: "bg-blue-50",
+      link: "/inventory"
+    },
+    {
+      title: "Forecast Confidence",
+      value: forecastingData?.avgConfidence ? `${forecastingData.avgConfidence.toFixed(0)}%` : "0%",
+      icon: Brain,
+      color: "text-purple-600",
+      bgColor: "bg-purple-50",
+      link: "/forecasting"
+    }
+  ];
+
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {quickStats.map((stat, index) => {
+        const Icon = stat.icon;
+        return (
+          <Link key={index} href={stat.link}>
+            <Card className="hover:shadow-md transition-shadow cursor-pointer" data-testid={`phase1-stat-${index}`}>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">{stat.title}</p>
+                    <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
+                  </div>
+                  <div className={`p-2 rounded-lg ${stat.bgColor}`}>
+                    <Icon className={`h-5 w-5 ${stat.color}`} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+// Alerts Summary Component
+interface AlertsSummaryDashboardProps {
+  alerts: any[];
+}
+
+function AlertsSummaryDashboard({ alerts }: AlertsSummaryDashboardProps) {
+  const criticalAlerts = alerts.filter(alert => alert.severity === 'high').slice(0, 3);
+
+  if (criticalAlerts.length === 0) return null;
+
+  return (
+    <Card data-testid="alerts-summary-dashboard">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-red-500" />
+            <CardTitle>Critical Alerts</CardTitle>
+          </div>
+          <Link href="/alerts">
+            <Button variant="ghost" size="sm" className="text-brand-600 hover:text-brand-700">
+              View All <ArrowRight className="ml-1 h-4 w-4" />
+            </Button>
+          </Link>
+        </div>
+        <CardDescription>Issues requiring immediate attention</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {criticalAlerts.map((alert, index) => (
+            <div key={index} className="flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex-1">
+                <p className="font-medium text-red-900">{alert.vendorName || 'System'}</p>
+                <p className="text-sm text-red-700 line-clamp-2">{alert.message}</p>
+              </div>
+              <Badge variant="destructive">
+                {alert.severity.toUpperCase()}
+              </Badge>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Top Performing Brands Component
+interface TopPerformingBrandsDashboardProps {
+  loyaltyData: any[];
+  forecastingData: any[];
+}
+
+function TopPerformingBrandsDashboard({ loyaltyData, forecastingData }: TopPerformingBrandsDashboardProps) {
+  // Combine loyalty and forecasting data to determine top performers
+  const topBrands = loyaltyData?.slice(0, 4).map((brand, index) => {
+    const forecast = forecastingData?.find(f => f.vendorName === brand.vendorName);
+    return {
+      ...brand,
+      predictedGrowth: forecast?.growthPrediction || 0,
+      confidence: forecast?.confidenceScore || 0
+    };
+  }) || [];
+
+  return (
+    <Card data-testid="top-performing-brands-dashboard">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-green-500" />
+            <CardTitle>Top Performing Brands</CardTitle>
+          </div>
+          <Link href="/brand-loyalty">
+            <Button variant="ghost" size="sm" className="text-brand-600 hover:text-brand-700">
+              View Analysis <ArrowRight className="ml-1 h-4 w-4" />
+            </Button>
+          </Link>
+        </div>
+        <CardDescription>Based on loyalty scores and growth predictions</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {topBrands.map((brand, index) => (
+            <div key={index} className="p-4 border rounded-lg bg-gradient-to-r from-green-50 to-blue-50">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-semibold text-gray-900">{brand.vendorName}</h4>
+                <Badge variant="default" className="bg-green-100 text-green-800">
+                  #{index + 1}
+                </Badge>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Loyalty Score:</span>
+                  <span className="font-medium">{brand.affinityScore?.toFixed(1)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Predicted Growth:</span>
+                  <span className={`font-medium ${brand.predictedGrowth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {brand.predictedGrowth >= 0 ? '+' : ''}{brand.predictedGrowth?.toFixed(1)}%
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Customers:</span>
+                  <span className="font-medium">{brand.totalCustomers}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Actionable Insights Component
+interface ActionableInsightsDashboardProps {
+  alertsData: any[];
+  loyaltyData: any[];
+  inventoryData: any;
+  forecastingData: any[];
+}
+
+function ActionableInsightsDashboard({ alertsData, loyaltyData, inventoryData, forecastingData }: ActionableInsightsDashboardProps) {
+  const insights = [];
+
+  // Generate insights based on data
+  if (alertsData && alertsData.length > 0) {
+    insights.push({
+      type: 'alert',
+      title: 'Critical Alerts Require Attention',
+      description: `${alertsData.length} active alerts need resolution`,
+      action: 'Review Alerts',
+      link: '/alerts',
+      urgency: 'high'
+    });
+  }
+
+  if (inventoryData?.reorderNeeded > 0) {
+    insights.push({
+      type: 'inventory',
+      title: 'Inventory Reorder Needed',
+      description: `${inventoryData.reorderNeeded} products below reorder point`,
+      action: 'Review Inventory',
+      link: '/inventory',
+      urgency: 'medium'
+    });
+  }
+
+  if (loyaltyData && loyaltyData.length > 0) {
+    const topBrand = loyaltyData[0];
+    insights.push({
+      type: 'loyalty',
+      title: 'Loyalty Leader Opportunity',
+      description: `${topBrand.vendorName} shows highest loyalty (${topBrand.affinityScore?.toFixed(1)}) - consider expanding`,
+      action: 'View Brand Analysis',
+      link: '/brand-loyalty',
+      urgency: 'low'
+    });
+  }
+
+  if (forecastingData && forecastingData.length > 0) {
+    const growthBrand = forecastingData.find(f => f.growthPrediction > 20);
+    if (growthBrand) {
+      insights.push({
+        type: 'forecast',
+        title: 'High Growth Prediction',
+        description: `${growthBrand.vendorName} forecasted +${growthBrand.growthPrediction?.toFixed(1)}% growth`,
+        action: 'View Forecasts',
+        link: '/forecasting',
+        urgency: 'medium'
+      });
+    }
+  }
+
+  const getUrgencyColor = (urgency: string) => {
+    switch (urgency) {
+      case 'high': return 'border-red-200 bg-red-50';
+      case 'medium': return 'border-yellow-200 bg-yellow-50';
+      case 'low': return 'border-blue-200 bg-blue-50';
+      default: return 'border-gray-200 bg-gray-50';
+    }
+  };
+
+  const getUrgencyIcon = (type: string) => {
+    switch (type) {
+      case 'alert': return AlertTriangle;
+      case 'inventory': return Target;
+      case 'loyalty': return Heart;
+      case 'forecast': return Brain;
+      default: return Zap;
+    }
+  };
+
+  if (insights.length === 0) {
+    return (
+      <Card data-testid="actionable-insights-dashboard">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <CheckCircle className="h-5 w-5 text-green-500" />
+            <CardTitle>All Systems Optimal</CardTitle>
+          </div>
+          <CardDescription>No critical actions needed at this time</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-4">
+            <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-2" />
+            <p className="text-gray-600">Your business metrics are performing well across all areas.</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card data-testid="actionable-insights-dashboard">
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <Zap className="h-5 w-5 text-yellow-500" />
+          <CardTitle>Actionable Insights</CardTitle>
+        </div>
+        <CardDescription>Priority recommendations across all business areas</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {insights.slice(0, 4).map((insight, index) => {
+            const Icon = getUrgencyIcon(insight.type);
+            return (
+              <div key={index} className={`p-4 border rounded-lg ${getUrgencyColor(insight.urgency)}`}>
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-3 flex-1">
+                    <Icon className="h-5 w-5 mt-0.5 text-gray-600" />
+                    <div className="flex-1">
+                      <h4 className="font-medium text-gray-900 mb-1">{insight.title}</h4>
+                      <p className="text-sm text-gray-700 mb-2">{insight.description}</p>
+                    </div>
+                  </div>
+                  <Link href={insight.link}>
+                    <Button variant="outline" size="sm">
+                      {insight.action}
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Demo Data Functions for Dashboard Integration
+function getDemoAlertsData() {
+  return [
+    {
+      id: 'alert_1',
+      alertType: 'performance_drop',
+      message: 'Nike sales dropped by 25% compared to last week',
+      severity: 'high',
+      vendorName: 'Nike',
+      createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      isRead: false
+    },
+    {
+      id: 'alert_2',
+      alertType: 'inventory_low',
+      message: 'Adidas running shoes inventory critically low',
+      severity: 'high',
+      vendorName: 'Adidas',
+      createdAt: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+      isRead: false
+    }
+  ];
+}
+
+function getDemoBrandLoyaltyData() {
+  return [
+    {
+      vendorId: 'vendor_1',
+      vendorName: 'Nike',
+      affinityScore: 8.2,
+      totalCustomers: 234,
+      totalSpent: 89450,
+      averageOrderValue: 125.30
+    },
+    {
+      vendorId: 'vendor_2',
+      vendorName: 'Adidas',
+      affinityScore: 7.8,
+      totalCustomers: 198,
+      totalSpent: 72340,
+      averageOrderValue: 118.90
+    },
+    {
+      vendorId: 'vendor_3',
+      vendorName: 'Under Armour',
+      affinityScore: 6.9,
+      totalCustomers: 156,
+      totalSpent: 51230,
+      averageOrderValue: 108.50
+    },
+    {
+      vendorId: 'vendor_4',
+      vendorName: 'Puma',
+      affinityScore: 6.4,
+      totalCustomers: 142,
+      totalSpent: 43890,
+      averageOrderValue: 95.20
+    }
+  ];
+}
+
+function getDemoForecastingData() {
+  return [
+    {
+      vendorId: 'vendor_1',
+      vendorName: 'Nike',
+      predictedRevenue: 45000,
+      growthPrediction: 18.5,
+      confidenceScore: 85.2
+    },
+    {
+      vendorId: 'vendor_2',
+      vendorName: 'Adidas',
+      predictedRevenue: 38000,
+      growthPrediction: 12.3,
+      confidenceScore: 78.9
+    },
+    {
+      vendorId: 'vendor_3',
+      vendorName: 'Under Armour',
+      predictedRevenue: 28000,
+      growthPrediction: 8.7,
+      confidenceScore: 72.4
+    }
+  ];
+}
+
+function getDemoForecastingSummary() {
+  return {
+    totalForecastedRevenue: 145670,
+    avgConfidence: 78.5,
+    avgGrowthRate: 12.3,
+    totalVendors: 4
+  };
+}
+
+function getDemoInventoryData() {
+  return {
+    totalProducts: 156,
+    totalInventoryValue: 487230,
+    avgSellThroughRate: 18.5,
+    deadStockValue: 23450,
+    deadStockCount: 8,
+    fastMovingProducts: 45,
+    slowMovingProducts: 23,
+    outOfStockProducts: 5,
+    lowStockProducts: 12,
+    reorderNeeded: 18
+  };
+}
+
+function getDemoAlertStatsData() {
+  return {
+    totalAlerts: 12,
+    activeAlerts: 4,
+    highPriorityAlerts: 2,
+    resolvedToday: 3,
+    newAlertsLast24h: 2
+  };
 }

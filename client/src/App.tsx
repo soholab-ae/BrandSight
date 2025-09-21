@@ -16,6 +16,10 @@ import CustomerInsights from "@/pages/customers";
 import ProductPerformance from "@/pages/products";
 import ExportReports from "@/pages/reports";
 import Billing from "@/pages/billing";
+import AlertsPage from "@/pages/alerts";
+import BrandLoyaltyPage from "@/pages/brand-loyalty";
+import InventoryPage from "@/pages/inventory";
+import ForecastingPage from "@/pages/forecasting";
 
 function OnboardingRouter() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
@@ -68,6 +72,10 @@ function OnboardingRouter() {
       {/* Main dashboard and analytics pages - accessible for all authenticated users */}
       <Route path="/" component={Dashboard} />
       <Route path="/dashboard" component={Dashboard} />
+      <Route path="/alerts" component={AlertsPage} />
+      <Route path="/brand-loyalty" component={BrandLoyaltyPage} />
+      <Route path="/inventory" component={InventoryPage} />
+      <Route path="/forecasting" component={ForecastingPage} />
       <Route path="/vendors" component={VendorPerformance} />
       <Route path="/sales" component={SalesAnalytics} />
       <Route path="/customers" component={CustomerInsights} />

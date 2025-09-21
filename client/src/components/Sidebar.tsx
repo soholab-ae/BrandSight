@@ -3,12 +3,16 @@ import { Link, useLocation } from "wouter";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { BarChart3, ShoppingCart, Users, Package, Download, TrendingUp, Menu, CreditCard } from "lucide-react";
+import { BarChart3, ShoppingCart, Users, Package, Download, TrendingUp, Menu, CreditCard, AlertTriangle, Heart, Archive, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 const navigationItems = [
   { path: "/", label: "Overview", icon: BarChart3 },
+  { path: "/alerts", label: "Smart Alerts", icon: AlertTriangle },
+  { path: "/brand-loyalty", label: "Brand Loyalty", icon: Heart },
+  { path: "/inventory", label: "Inventory Intelligence", icon: Archive },
+  { path: "/forecasting", label: "Predictive Forecasting", icon: Brain },
   { path: "/vendors", label: "Vendor Performance", icon: TrendingUp },
   { path: "/sales", label: "Sales Analytics", icon: ShoppingCart },
   { path: "/customers", label: "Customer Insights", icon: Users },
