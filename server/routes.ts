@@ -8,6 +8,7 @@ import { createBillingSubscription, checkActiveSubscription, cancelSubscription,
 import { AlertService } from "./services/alertService";
 import { BrandLoyaltyService } from "./services/brandLoyaltyService";
 import { inventoryService } from "./services/inventoryService";
+import { ForecastingService } from "./services/forecastingService";
 import { cacheService, CacheKeyBuilder } from "./services/cacheService";
 import * as csv from 'fast-csv';
 import * as XLSX from 'xlsx';
@@ -236,6 +237,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (userId && userId !== 'demo_user') {
       // User is properly authenticated, proceed normally
       return next();
+    }
+    
+    // For Shopify auth mode, check if we have a valid session
+    if (useShopifyAuth) {
+      const session = res.locals.shopify?.session || req.shopifySession;
+      if (session && session.shop) {
+        // Valid Shopify session exists, proceed normally
+        return next();
+      }
     }
     
     // No valid authentication found, enable demo mode
@@ -1905,6 +1915,137 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching inventory overview:", error);
       res.status(500).json({ message: "Failed to fetch inventory overview" });
+    }
+  });
+
+  // ============= PREDICTIVE FORECASTING ENDPOINTS =============
+
+  // Get sales forecasts with 30/60/90 day predictions
+  app.get('/api/forecasts/sales', authenticateOrDemo, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const { period = '30', vendorId } = req.query;
+
+      // Validate period parameter
+      const validPeriods = ['30', '60', '90'];
+      if (!validPeriods.includes(period)) {
+        return res.status(400).json({ 
+          message: "Invalid period. Must be one of: 30, 60, 90" 
+        });
+      }
+
+      const periodDays = parseInt(period);
+      const forecasts = await ForecastingService.generateSalesForecasts(
+        store.id,
+        vendorId as string,
+        periodDays
+      );
+
+      res.json({
+        storeId: store.id,
+        period: periodDays,
+        vendorId: vendorId || null,
+        forecastDate: new Date().toISOString(),
+        forecasts,
+        metadata: {
+          totalVendors: forecasts.length,
+          avgConfidence: forecasts.length > 0 
+            ? forecasts.reduce((sum, f) => sum + f.confidenceScore, 0) / forecasts.length 
+            : 0,
+          modelTypes: [...new Set(forecasts.map(f => f.modelUsed))]
+        }
+      });
+    } catch (error) {
+      console.error("Error generating sales forecasts:", error);
+      res.status(500).json({ message: "Failed to generate sales forecasts" });
+    }
+  });
+
+  // Get historical trend analysis for vendors
+  app.get('/api/forecasts/trends', authenticateOrDemo, planEnforcement, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const { vendorId } = req.query;
+
+      const trendAnalyses = await ForecastingService.analyzeTrends(
+        store.id,
+        vendorId as string
+      );
+
+      res.json({
+        storeId: store.id,
+        vendorId: vendorId || null,
+        analysisDate: new Date().toISOString(),
+        trends: trendAnalyses,
+        summary: {
+          totalVendors: trendAnalyses.length,
+          growingVendors: trendAnalyses.filter(t => t.trends.overall === 'growing').length,
+          stableVendors: trendAnalyses.filter(t => t.trends.overall === 'stable').length,
+          decliningVendors: trendAnalyses.filter(t => t.trends.overall === 'declining').length,
+          seasonalVendors: trendAnalyses.filter(t => t.trends.seasonality.detected).length
+        }
+      });
+    } catch (error) {
+      console.error("Error analyzing trends:", error);
+      res.status(500).json({ message: "Failed to analyze trends" });
+    }
+  });
+
+  // Get forecast accuracy metrics and validation data
+  app.get('/api/forecasts/accuracy', authenticateOrDemo, planEnforcement, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+      const { vendorId } = req.query;
+
+      const accuracyMetrics = await ForecastingService.getForecastAccuracy(
+        store.id,
+        vendorId as string
+      );
+
+      res.json({
+        storeId: store.id,
+        vendorId: vendorId || null,
+        reportDate: new Date().toISOString(),
+        accuracy: accuracyMetrics,
+        summary: {
+          totalMetrics: accuracyMetrics.length,
+          highConfidenceForecasts: accuracyMetrics.filter(m => m.confidence === 'high').length,
+          mediumConfidenceForecasts: accuracyMetrics.filter(m => m.confidence === 'medium').length,
+          lowConfidenceForecasts: accuracyMetrics.filter(m => m.confidence === 'low').length,
+          avgAccuracy: accuracyMetrics.length > 0 
+            ? accuracyMetrics.reduce((sum, m) => sum + (100 - m.accuracy.mape), 0) / accuracyMetrics.length 
+            : 0
+        }
+      });
+    } catch (error) {
+      console.error("Error getting forecast accuracy:", error);
+      res.status(500).json({ message: "Failed to get forecast accuracy" });
+    }
+  });
+
+  // Refresh all forecasts with latest data
+  app.post('/api/forecasts/refresh', authenticateOrDemo, planEnforcement, async (req: any, res) => {
+    try {
+      const store = await getUserCurrentStore(req);
+
+      const refreshResult = await ForecastingService.refreshForecasts(store.id);
+
+      res.json({
+        message: "Forecasts refreshed successfully",
+        storeId: store.id,
+        refreshDate: refreshResult.timestamp.toISOString(),
+        refreshed: refreshResult.refreshed,
+        vendors: refreshResult.vendors,
+        metadata: {
+          totalForecasts: refreshResult.refreshed,
+          vendorCount: refreshResult.vendors.length,
+          periods: [30, 60, 90],
+          status: "completed"
+        }
+      });
+    } catch (error) {
+      console.error("Error refreshing forecasts:", error);
+      res.status(500).json({ message: "Failed to refresh forecasts" });
     }
   });
 
