@@ -816,11 +816,13 @@ export async function setupShopifyAuth(app: Express) {
     }
     
     // Always skip validation for demo-compatible endpoints that support demo mode
-    // SECURITY FIX: Remove brand-loyalty route exemption - these routes must use authenticateOrDemo
+    // These routes use authenticateOrDemo middleware which handles demo mode properly
     if (req.path.startsWith('/api/stores/current/') ||
         req.path.startsWith('/api/alerts') ||
         req.path.startsWith('/api/alert-rules') ||
-        req.path.startsWith('/api/cache/')) {
+        req.path.startsWith('/api/cache/') ||
+        req.path.startsWith('/api/brand-loyalty') ||
+        req.path.startsWith('/api/inventory')) {
       return next();
     }
     

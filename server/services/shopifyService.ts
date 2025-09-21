@@ -28,6 +28,9 @@ interface ShopifyProduct {
     id: number;
     price: string;
     compare_at_price?: string;
+    inventory_quantity: number;
+    inventory_management?: string;
+    inventory_policy?: string;
   }>;
   status: string;
   created_at: string;
@@ -295,8 +298,9 @@ export class ShopifyService {
         
         newVendorsToCreate.clear();
 
-        // Second pass: prepare products for bulk upsert with O(1) vendor lookups
+        // Second pass: prepare products and inventory for bulk upsert with O(1) vendor lookups
         const productsToUpsert: InsertProduct[] = [];
+        const inventoriesToUpsert: any[] = [];
         
         for (const shopifyProduct of products) {
           const vendor = vendorMap.get(shopifyProduct.vendor);
@@ -315,12 +319,37 @@ export class ShopifyService {
           };
 
           productsToUpsert.push(product);
+          
+          // Extract inventory data from first variant (most common pattern)
+          if (shopifyProduct.variants && shopifyProduct.variants.length > 0) {
+            const variant = shopifyProduct.variants[0];
+            const inventoryQuantity = variant.inventory_quantity || 0;
+            
+            // Only sync inventory if it's managed by Shopify
+            if (variant.inventory_management === 'shopify') {
+              inventoriesToUpsert.push({
+                productId: shopifyProduct.id.toString(),
+                storeId: store.id,
+                vendorId: vendor?.id,
+                quantity: inventoryQuantity,
+                availableQuantity: inventoryQuantity,
+                reservedQuantity: 0,
+                syncedAt: new Date(),
+              });
+            }
+          }
         }
         
-        // Bulk upsert products for better performance
+        // Bulk upsert products and inventory for better performance
         if (productsToUpsert.length > 0) {
           await storage.bulkUpsertProducts(productsToUpsert);
           syncedCount += productsToUpsert.length;
+        }
+        
+        // Bulk upsert inventory data  
+        if (inventoriesToUpsert.length > 0) {
+          await storage.bulkUpsertInventory(inventoriesToUpsert);
+          console.log(`Synced inventory for ${inventoriesToUpsert.length} products`);
         }
 
         // Fix pagination - read headers from response, not parsed data
