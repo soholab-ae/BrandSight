@@ -3,6 +3,7 @@
 BrandSight is a comprehensive Shopify analytics application that provides deep brand-specific insights that standard Shopify analytics don't offer. The app allows store owners to analyze performance metrics by brand and vendor, including Average Order Value (AOV), conversion rates, visitor metrics, and revenue analytics across different product brands. Users can connect their Shopify stores to sync product and order data, then view detailed dashboards with brand comparisons, top products, landing page analytics, and customizable date ranges.
 
 ## Recent Updates
+- **Welcome Page Eliminated**: Users now go directly to the dashboard with demo mode - streamlined UX with instant access to features
 - **Demo Mode Implemented**: Instant access to dashboard without requiring Shopify store connection
 - **Sample Data Available**: Realistic demo data featuring 5 athletic brands (Nike, Adidas, Under Armour, Puma, New Balance) with 250+ orders
 - **Logo Updated**: New gradient BrandSight logo with better visibility in header (replaced white text version)
