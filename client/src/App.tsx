@@ -25,19 +25,10 @@ import NotificationPreferencesPage from "@/pages/notification-preferences";
 
 function OnboardingRouter() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const { isEmbedded, shop, host } = useAppBridge();
-
-  // For embedded apps, skip store fetching and go directly to dashboard when authenticated
-  // For non-embedded apps, fetch stores to determine onboarding state
-  const { data: stores, isLoading: storesLoading } = useQuery({
-    queryKey: ['/api/stores'],
-    enabled: isAuthenticated && !isEmbedded, // Skip for embedded apps
-    retry: 1
-  });
+  const { isEmbedded } = useAppBridge();
 
   // Show loading state while checking authentication
-  // For embedded apps, only wait for auth, not stores
-  if (authLoading || (isAuthenticated && !isEmbedded && storesLoading)) {
+  if (authLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center" data-testid="loading-screen">
         <div className="text-center">
@@ -48,30 +39,17 @@ function OnboardingRouter() {
     );
   }
 
-  // Not authenticated - show landing page
-  // For embedded contexts that are not authenticated, the useAuth hook will handle redirection
-  if (!isAuthenticated) {
-    return (
-      <Switch>
-        <Route path="/" component={Landing} />
-        <Route path="/welcome" component={Landing} />
-        <Route path="/setup" component={Landing} />
-        <Route path="/sync" component={Landing} />
-        <Route component={NotFound} />
-      </Switch>
-    );
-  }
-
-  // Authenticated users - for embedded apps, go directly to dashboard
-  // For non-embedded apps, allow access to setup/sync if they want to connect additional stores
+  // All users (authenticated and unauthenticated) can access the dashboard
+  // Dashboard will show demo mode if no store is connected
+  // This eliminates the landing/welcome page entirely
   
   return (
     <Switch>
-      {/* For non-embedded apps, allow direct access to onboarding pages */}
-      {!isEmbedded && <Route path="/setup" component={Setup} />}
-      {!isEmbedded && <Route path="/sync" component={Sync} />}
+      {/* Setup and sync pages for store connection */}
+      <Route path="/setup" component={Setup} />
+      <Route path="/sync" component={Sync} />
       
-      {/* Main dashboard and analytics pages - accessible for all authenticated users */}
+      {/* Main dashboard and analytics pages - accessible for all users */}
       <Route path="/" component={Dashboard} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/alerts" component={AlertsPage} />
@@ -88,7 +66,7 @@ function OnboardingRouter() {
       <Route path="/billing" component={Billing} />
       <Route path="/vendor/:vendorSlug" component={Dashboard} />
       
-      {/* Fallback - show dashboard (important for embedded apps) */}
+      {/* Fallback - show dashboard */}
       <Route component={Dashboard} />
     </Switch>
   );
