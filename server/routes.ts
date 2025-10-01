@@ -649,7 +649,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (process.env.DEFAULT_SHOP_DOMAIN && !req.user && !req.shopifyUser) {
       try {
         const shopDomain = process.env.DEFAULT_SHOP_DOMAIN;
-        const userId = `shopify_${shopDomain.replace('.myshopify.com', '')}`;
+        // Match the userId format used in upsertShopifyUser for stores without associated users
+        const userId = `shopify_shop_${shopDomain.replace('.myshopify.com', '')}`;
         
         const stores = await storage.getUserStores(userId);
         return res.json(stores);
@@ -687,8 +688,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No shop domain configured" });
       }
       
-      // Create a default user ID for the store
-      const userId = `shopify_${shopDomain.replace('.myshopify.com', '')}`;
+      // Create a default user ID for the store - match format used in upsertShopifyUser
+      const userId = `shopify_shop_${shopDomain.replace('.myshopify.com', '')}`;
       
       // Create or update the user
       const user = await storage.upsertUser({
