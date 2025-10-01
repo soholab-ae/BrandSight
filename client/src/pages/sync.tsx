@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useQuery } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { 
   BarChart3, 
@@ -92,6 +93,8 @@ export default function Sync() {
             title: "Sync completed!",
             description: "Your store analytics are ready. Redirecting to dashboard...",
           });
+          // Invalidate all queries to ensure fresh data on dashboard
+          queryClient.invalidateQueries();
           // Redirect to dashboard after success
           setTimeout(() => {
             window.location.href = "/";

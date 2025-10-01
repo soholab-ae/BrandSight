@@ -38,10 +38,10 @@ export default function Dashboard() {
   // useMemoryStats();
   // const { clearCache, performCleanup } = useDatasetOptimization();
   
-  // Check if using demo data
+  // Check if using demo data - always fetch stores to detect real vs demo mode
   const { data: stores } = useQuery({
     queryKey: ['/api/stores'],
-    enabled: isAuthenticated
+    retry: 1
   });
   
   const isDemoMode = !stores || !Array.isArray(stores) || stores.length === 0 || stores[0]?.id === 'demo_store_1';
@@ -59,35 +59,35 @@ export default function Dashboard() {
   // Fetch recent alerts for AlertsSummary
   const { data: alertsData } = useQuery({
     queryKey: ['/api/alerts', { limit: 5, severity: 'high' }],
-    enabled: isAuthenticated,
+    enabled: !isDemoMode,
     initialData: isDemoMode ? { data: getDemoAlertsData() } : undefined
   });
 
   // Fetch brand loyalty data for TopPerformingBrands
   const { data: loyaltyData } = useQuery({
     queryKey: ['/api/brand-loyalty/affinity'],
-    enabled: isAuthenticated,
+    enabled: !isDemoMode,
     initialData: isDemoMode ? getDemoBrandLoyaltyData() : undefined
   });
 
   // Fetch forecasting data for predictions
   const { data: forecastingData } = useQuery({
     queryKey: ['/api/forecasts/sales', { period: 30 }],
-    enabled: isAuthenticated,
+    enabled: !isDemoMode,
     initialData: isDemoMode ? { data: getDemoForecastingData(), summary: getDemoForecastingSummary() } : undefined
   });
 
   // Fetch inventory overview for QuickStats
   const { data: inventoryData } = useQuery({
     queryKey: ['/api/inventory/overview'],
-    enabled: isAuthenticated,
+    enabled: !isDemoMode,
     initialData: isDemoMode ? getDemoInventoryData() : undefined
   });
 
   // Fetch alert statistics for QuickStats
   const { data: alertStatsData } = useQuery({
     queryKey: ['/api/alerts/stats'],
-    enabled: isAuthenticated,
+    enabled: !isDemoMode,
     initialData: isDemoMode ? getDemoAlertStatsData() : undefined
   });
 
