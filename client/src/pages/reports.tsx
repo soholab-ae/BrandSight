@@ -176,7 +176,7 @@ export default function ExportReports() {
               <InfoIcon className="h-4 w-4 text-brand-600" />
               <AlertDescription className="text-brand-800">
                 <strong>Demo Mode:</strong> Export functionality is limited in demo mode. 
-                <a href="/setup" className="underline ml-1 text-brand-700 hover:text-brand-900">
+                <a href="/api/login" className="underline ml-1 text-brand-700 hover:text-brand-900">
                   Connect your Shopify store
                 </a> to export your real data.
               </AlertDescription>

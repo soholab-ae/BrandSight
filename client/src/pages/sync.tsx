@@ -300,11 +300,11 @@ export default function Sync() {
                       <Button 
                         variant="outline" 
                         size="sm"
-                        onClick={() => window.location.href = "/setup"}
+                        onClick={() => window.location.href = "/"}
                         className="border-red-200 text-red-700 hover:bg-red-50"
-                        data-testid="button-back-setup"
+                        data-testid="button-back-dashboard"
                       >
-                        Back to Setup
+                        Back to Dashboard
                       </Button>
                     </div>
                   </div>

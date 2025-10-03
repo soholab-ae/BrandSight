@@ -7,7 +7,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAppBridge } from "@/contexts/AppBridgeContext";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
-import Setup from "@/pages/setup";
 import Sync from "@/pages/sync";
 import Dashboard from "@/pages/dashboard";
 import VendorPerformance from "@/pages/vendors";
@@ -45,8 +44,7 @@ function OnboardingRouter() {
   
   return (
     <Switch>
-      {/* Setup and sync pages for store connection */}
-      <Route path="/setup" component={Setup} />
+      {/* Sync page for OAuth callback progress tracking */}
       <Route path="/sync" component={Sync} />
       
       {/* Main dashboard and analytics pages - accessible for all users */}

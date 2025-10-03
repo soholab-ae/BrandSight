@@ -43,7 +43,7 @@ export default function EmptyState({
           defaultTitle: 'No Store Connected',
           defaultDescription: 'Connect your Shopify store to start tracking vendor analytics and performance metrics.',
           actionCta: 'Connect Store',
-          actionHref: '/setup'
+          actionHref: '/api/login'
         };
       case 'no-data':
         return {
@@ -154,9 +154,9 @@ export default function EmptyState({
         {showSetupLink && type !== 'no-stores' && (
           <div className="mt-4 text-center">
             <button 
-              onClick={() => window.location.href = '/setup'}
+              onClick={() => window.location.href = '/api/login'}
               className="text-sm text-brand-600 hover:text-brand-700 underline"
-              data-testid="link-setup"
+              data-testid="link-connect-store"
             >
               Need to connect a different store?
             </button>
@@ -174,7 +174,7 @@ export function NoStoresEmptyState() {
       type="no-stores"
       action={{
         label: "Connect Your Store",
-        onClick: () => window.location.href = '/setup'
+        onClick: () => window.location.href = '/api/login'
       }}
       showSetupLink={false}
     />
