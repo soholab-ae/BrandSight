@@ -645,22 +645,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Store routes
   app.get('/api/stores', async (req: any, res, next) => {
-    // If we have a default shop domain and no auth, return empty array or default stores
-    if (process.env.DEFAULT_SHOP_DOMAIN && !req.user && !req.shopifyUser) {
+    console.log('[API /api/stores] Request received', {
+      hasUser: !!req.user,
+      hasShopifyUser: !!req.shopifyUser,
+      hasDefaultShopDomain: !!process.env.DEFAULT_SHOP_DOMAIN
+    });
+    
+    // If no authentication, try to get ANY stores from the database
+    // This supports manual setup flow where users aren't authenticated via OAuth
+    if (!req.user && !req.shopifyUser) {
       try {
-        const shopDomain = process.env.DEFAULT_SHOP_DOMAIN;
-        // Match the userId format used in upsertShopifyUser for stores without associated users
-        const userId = `shopify_shop_${shopDomain.replace('.myshopify.com', '')}`;
+        // First, try to get all stores to see if any exist
+        const allStores = await storage.getAllStores();
+        console.log('[API /api/stores] No auth, found stores:', allStores?.length || 0);
         
-        const stores = await storage.getUserStores(userId);
-        return res.json(stores);
+        if (allStores && allStores.length > 0) {
+          // Return all stores (typically just one for manual setup)
+          return res.json(allStores);
+        }
+        
+        // If no stores found, return empty array (demo mode)
+        console.log('[API /api/stores] No stores found in database, returning empty array');
+        return res.json([]);
       } catch (error) {
-        console.error("Error fetching default stores:", error);
-        return res.json([]); // Return empty array if no stores yet
+        console.error("[API /api/stores] Error fetching stores:", error);
+        return res.json([]); // Return empty array on error
       }
     }
     
-    // Otherwise, use normal authentication
+    // For authenticated users, use normal authentication
     authenticate(req, res, async () => {
       try {
         const userId = getUserId(req);
@@ -668,7 +681,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(401).json({ message: "No user ID found" });
         }
         
+        console.log('[API /api/stores] Authenticated user, fetching stores for userId:', userId);
         const stores = await storage.getUserStores(userId);
+        console.log('[API /api/stores] Found stores for user:', stores?.length || 0);
         res.json(stores);
       } catch (error) {
         console.error("Error fetching stores:", error);

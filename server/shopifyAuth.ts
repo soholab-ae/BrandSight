@@ -116,12 +116,25 @@ async function validateSessionToken(token: string): Promise<{ shop: string; user
 
 // Shopify-compatible user and store storage
 async function upsertShopifyUser(session: any) {
+  console.log('[UPSERT_USER] Starting upsertShopifyUser with session:', {
+    shop: session?.shop,
+    hasAccessToken: !!session?.accessToken,
+    hasOnlineAccessInfo: !!session?.onlineAccessInfo,
+    associatedUser: session?.onlineAccessInfo?.associated_user ? 'present' : 'absent'
+  });
+  
   const { shop, accessToken, onlineAccessInfo } = session;
+  
+  if (!shop || !accessToken) {
+    console.error('[UPSERT_USER] Missing required session data:', { hasShop: !!shop, hasAccessToken: !!accessToken });
+    throw new Error('Missing shop or accessToken in session');
+  }
   
   let userId: string;
   
   if (onlineAccessInfo?.associated_user) {
     const user = onlineAccessInfo.associated_user;
+    console.log('[UPSERT_USER] Creating user with associated user info:', { userId: `shopify_${user.id}`, email: user.email });
     const savedUser = await storage.upsertUser({
       id: `shopify_${user.id}`,
       email: user.email,
@@ -130,31 +143,38 @@ async function upsertShopifyUser(session: any) {
       profileImageUrl: user.avatar || null,
     });
     userId = savedUser.id;
+    console.log('[UPSERT_USER] User saved successfully:', userId);
   } else {
     // For stores without associated users, create a user based on shop info
+    userId = `shopify_shop_${shop.replace('.myshopify.com', '')}`;
+    console.log('[UPSERT_USER] Creating shop-based user (no associated user):', userId);
     const savedUser = await storage.upsertUser({
-      id: `shopify_shop_${shop.replace('.myshopify.com', '')}`,
+      id: userId,
       email: null,
       firstName: null,
       lastName: null,
       profileImageUrl: null,
     });
-    userId = savedUser.id;
+    console.log('[UPSERT_USER] Shop-based user saved successfully:', savedUser.id);
   }
   
   // Always save/update store information
+  console.log('[UPSERT_USER] Checking for existing store:', shop);
   const existingStore = await storage.getStoreByDomain(shop);
   
   if (existingStore) {
     // Update existing store with new access token
+    console.log('[UPSERT_USER] Updating existing store:', existingStore.id);
     await storage.updateStore(existingStore.id, {
       accessToken,
       lastSyncAt: new Date(),
       isActive: true,
     });
+    console.log('[UPSERT_USER] Store updated successfully:', existingStore.id);
   } else {
     // Create new store
-    await storage.createStore({
+    console.log('[UPSERT_USER] Creating new store for shop:', shop);
+    const newStore = await storage.createStore({
       userId,
       name: shop.replace('.myshopify.com', ''),
       domain: shop,
@@ -162,7 +182,10 @@ async function upsertShopifyUser(session: any) {
       isActive: true,
       lastSyncAt: new Date(),
     });
+    console.log('[UPSERT_USER] Store created successfully:', { storeId: newStore.id, userId, shop });
   }
+  
+  console.log('[UPSERT_USER] upsertShopifyUser completed successfully for shop:', shop);
 }
 
 // Enhanced authentication middleware for Shopify - supports both session tokens and cookie-based auth
@@ -744,16 +767,32 @@ export async function setupShopifyAuth(app: Express) {
     shopifyInstance.config.auth.callbackPath, 
     shopifyInstance.auth.callback(),
     async (req, res, next) => {
+      console.log('[OAUTH CALLBACK] Middleware triggered');
       try {
         const session = res.locals.shopify?.session;
+        console.log('[OAUTH CALLBACK] Session check:', {
+          hasSession: !!session,
+          hasAccessToken: !!session?.accessToken,
+          hasShop: !!session?.shop,
+          shop: session?.shop
+        });
+        
         if (session?.accessToken && session?.shop) {
+          console.log('[OAUTH CALLBACK] Valid session found, calling upsertShopifyUser for shop:', session.shop);
           // Store/update user and shop data
           await upsertShopifyUser(session);
+          console.log('[OAUTH CALLBACK] upsertShopifyUser completed successfully');
+          
+          console.log('[OAUTH CALLBACK] Registering webhooks for shop:', session.shop);
           await registerWebhooks(session);
+          console.log('[OAUTH CALLBACK] Webhooks registered successfully');
+        } else {
+          console.warn('[OAUTH CALLBACK] Invalid session - missing shop or accessToken');
         }
         next();
       } catch (error) {
-        console.error("Error in auth callback:", TokenEncryption.sanitizeForLogging(error));
+        console.error("[OAUTH CALLBACK] Error in auth callback:", TokenEncryption.sanitizeForLogging(error));
+        console.error("[OAUTH CALLBACK] Error stack:", error instanceof Error ? error.stack : 'No stack trace');
         // Continue anyway - webhook registration failure shouldn't block auth
         next();
       }
