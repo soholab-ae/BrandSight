@@ -81,6 +81,7 @@ export interface IStorage {
   upsertUser(user: UpsertUser): Promise<User>;
   
   // Store operations
+  getAllStores(): Promise<Store[]>;
   getUserStores(userId: string): Promise<Store[]>;
   createStore(store: InsertStore): Promise<Store>;
   getStore(id: string): Promise<Store | undefined>;
@@ -284,6 +285,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Store operations
+  async getAllStores(): Promise<Store[]> {
+    console.log('[STORAGE] Fetching all stores from database');
+    const allStores = await db.select().from(stores);
+    console.log('[STORAGE] Found stores:', allStores.length);
+    return this.processStoresForOutput(allStores);
+  }
+  
   async getUserStores(userId: string): Promise<Store[]> {
     // Return demo store for demo mode
     if (isDemoMode(userId)) {
