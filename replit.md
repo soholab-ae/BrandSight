@@ -3,6 +3,8 @@
 BrandSight is a comprehensive Shopify analytics application that provides deep brand-specific insights that standard Shopify analytics don't offer. The app allows store owners to analyze performance metrics by brand and vendor, including Average Order Value (AOV), conversion rates, visitor metrics, and revenue analytics across different product brands. Users can connect their Shopify stores to sync product and order data, then view detailed dashboards with brand comparisons, top products, landing page analytics, and customizable date ranges.
 
 ## Recent Updates
+- **Session Storage Fixed**: Replaced MemorySessionStorage with PostgreSQL-based persistent session storage to fix authentication issues
+- **Custom Session Storage**: Implemented PostgreSQLSessionStorage class that uses existing database for session persistence
 - **Setup Page Eliminated**: Removed manual setup flow - users now authenticate via Shopify OAuth and go directly to dashboard
 - **Streamlined OAuth Flow**: Install app → Authenticate → Dashboard (no intermediate setup steps)
 - **Demo Mode Implemented**: Instant access to dashboard without requiring Shopify store connection
@@ -37,7 +39,8 @@ The application uses a modern full-stack architecture with a React frontend and 
 - **PostgreSQL with Drizzle ORM**: Type-safe database operations with schema-first approach
 - **Database Connection**: Neon serverless PostgreSQL with connection pooling
 - **Schema Design**: Relational schema with tables for users, stores, vendors, products, orders, and analytics data
-- **Session Storage**: Dedicated sessions table for authentication state persistence
+- **Session Storage**: Dedicated sessions table for authentication state persistence (used for both Replit OIDC and Shopify OAuth sessions)
+- **Custom Shopify Session Storage**: PostgreSQLSessionStorage implementation for persistent Shopify session management
 
 ## Authentication & Authorization
 - **Replit OIDC Integration**: Seamless authentication flow using Replit's identity provider
