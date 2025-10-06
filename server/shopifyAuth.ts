@@ -1,11 +1,11 @@
 import { shopifyApp } from "@shopify/shopify-app-express";
-import { MemorySessionStorage } from "@shopify/shopify-app-session-storage-memory";
 import { ApiVersion } from "@shopify/shopify-api";
 import express, { type Express } from "express";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { storage } from "./storage";
 import { TokenEncryption } from "./services/tokenEncryption";
+import { postgresSessionStorage } from "./sessionStorage";
 
 
 // Conditionally initialize Shopify App Configuration
@@ -13,6 +13,7 @@ let shopify: any = null;
 
 function initializeShopify() {
   if (!shopify) {
+    console.log('[SHOPIFY_INIT] Initializing Shopify app with PostgreSQL session storage');
     shopify = shopifyApp({
       api: {
         apiKey: process.env.SHOPIFY_API_KEY!,
@@ -30,9 +31,10 @@ function initializeShopify() {
       webhooks: {
         path: "/api/webhooks",
       },
-      sessionStorage: new MemorySessionStorage(),
+      sessionStorage: postgresSessionStorage,
       useOnlineTokens: true,
     });
+    console.log('[SHOPIFY_INIT] Shopify app initialized successfully');
   }
   return shopify;
 }
