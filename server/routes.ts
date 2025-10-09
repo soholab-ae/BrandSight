@@ -432,182 +432,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
 </html>`);
   });
 
-  // Auth routes - simplified according to architect's plan
+  // Modern auth endpoint using session tokens
   app.get('/api/auth/user', async (req: any, res, next) => {
-    console.log('[AUTH DEBUG] ==> /api/auth/user endpoint called');
-    console.log('[AUTH DEBUG] useShopifyAuth:', useShopifyAuth);
-    console.log('[AUTH DEBUG] Request query params:', req.query);
-    console.log('[AUTH DEBUG] Request referrer:', req.get('referer'));
-    console.log('[AUTH DEBUG] Request headers (Shopify):', Object.keys(req.headers).filter(h => h.includes('shopify')));
-    console.log('[AUTH DEBUG] Session exists:', !!res.locals.shopify?.session);
-    console.log('[AUTH DEBUG] Session shop:', res.locals.shopify?.session?.shop);
+    console.log('[AUTH] /api/auth/user called');
     
     if (useShopifyAuth) {
       try {
-        // Enhanced parameter extraction for embedded contexts
-        let shop = req.query.shop || req.headers['x-shopify-shop-domain'] || res.locals.shopify?.session?.shop;
-        let host = req.query.host || req.headers['x-shopify-host'];
+        // Import token exchange functions
+        const { validateSessionToken, getAccessToken } = await import('./tokenExchange');
         
-        // For embedded apps, also check additional sources
-        const referer = req.get('referer') || '';
-        const isFromShopifyAdmin = referer.includes('admin.shopify.com');
+        // Check for session token in Authorization header (modern approach)
+        const authHeader = req.headers.authorization;
         
-        // Extract shop from referer if coming from Shopify admin and no shop found
-        if (!shop && isFromShopifyAdmin) {
-          const refererUrl = new URL(referer);
-          // Extract shop from admin.shopify.com/store/{shop}/... pattern
-          const pathParts = refererUrl.pathname.split('/');
-          const storeIndex = pathParts.indexOf('store');
-          if (storeIndex !== -1 && pathParts[storeIndex + 1]) {
-            shop = `${pathParts[storeIndex + 1]}.myshopify.com`;
-            console.log('[AUTH DEBUG] Extracted shop from referer:', shop);
+        if (authHeader?.startsWith('Bearer ')) {
+          const sessionToken = authHeader.substring(7);
+          console.log('[AUTH] Session token found in Authorization header');
+          
+          // Validate and exchange token
+          const result = await getAccessToken(sessionToken);
+          
+          if (result) {
+            console.log('[AUTH] Session token validated, returning user for shop:', result.shop);
+            return res.json(result.user || {
+              id: `shopify_shop_${result.shop.replace('.myshopify.com', '')}`,
+              email: null,
+              firstName: null,
+              lastName: null,
+              profileImageUrl: null
+            });
+          } else {
+            console.log('[AUTH] Session token validation failed');
+            return res.status(401).json({ 
+              error: 'Unauthorized',
+              message: 'Invalid or expired session token'
+            });
           }
         }
         
-        // Check for embedded context indicators
-        const isEmbeddedContext = isFromShopifyAdmin || 
-                                  req.query.embedded === '1' ||
-                                  req.headers['x-shopify-embedded'] === '1' ||
-                                  req.get('user-agent')?.includes('Shopify');
+        // No session token found - check if this is a demo mode request
+        const referer = req.get('referer') || '';
+        const isEmbeddedContext = referer.includes('admin.shopify.com') || req.query.embedded === '1';
         
-        console.log('[AUTH DEBUG] Shop:', shop, 'Host:', host, 'Embedded context:', isEmbeddedContext);
+        console.log('[AUTH] No session token found, checking context:', { isEmbeddedContext });
         
-        if (!shop && !isEmbeddedContext) {
-          // Only enable demo mode when clearly not in embedded context
-          console.log('[AUTH DEBUG] No shop context and not embedded, enabling demo mode');
-          const demoUser = {
+        // Only enable demo mode when explicitly NOT in an embedded context
+        if (!isEmbeddedContext && !req.query.shop && !req.headers['x-shopify-shop-domain']) {
+          console.log('[AUTH] Enabling demo mode (not embedded, no shop context)');
+          return res.json({
             id: "demo_user",
-            email: "demo@example.com", 
+            email: "demo@example.com",
             firstName: "Demo",
             lastName: "User",
             profileImageUrl: null
-          };
-          return res.json(demoUser);
-        }
-        
-        if (!shop && isEmbeddedContext) {
-          // We're in embedded context but no shop found - return proper App Bridge response
-          console.log('[AUTH DEBUG] ==> Embedded context detected but no shop parameter found');
-          console.log('[AUTH DEBUG] Referer:', referer);
-          console.log('[AUTH DEBUG] User-Agent:', req.get('user-agent'));
-          console.log('[AUTH DEBUG] All headers:', Object.keys(req.headers).join(', '));
-          
-          const loginUrl = `/api/login?embedded=1${host ? `&host=${encodeURIComponent(host)}` : ''}`;
-          console.log('[AUTH DEBUG] Returning 401 for embedded app with loginUrl:', loginUrl);
-          
-          return res.status(401).json({ 
-            message: "Shop parameter required for embedded app",
-            loginUrl,
-            requiresReload: true,
-            isEmbedded: true,
-            debug: {
-              referer,
-              userAgent: req.get('user-agent'),
-              isFromShopifyAdmin,
-              headers: Object.keys(req.headers).filter(h => h.includes('shopify'))
-            }
           });
         }
         
-        // Try to validate authenticated session first
-        let sessionValid = false;
-        try {
-          const { initializeShopify } = await import("./shopifyAuth");
-          const shopifyInstance = initializeShopify();
-          
-          if (shopifyInstance && shopifyInstance.config) {
-            await new Promise((resolve, reject) => {
-              shopifyInstance.validateAuthenticatedSession()(req, res, (error: any) => {
-                if (error) {
-                  console.log('[AUTH DEBUG] Shopify session validation failed:', error.message);
-                  reject(error);
-                } else {
-                  console.log('[AUTH DEBUG] Shopify session validation passed');
-                  sessionValid = true;
-                  resolve(true);
-                }
-              });
-            });
-          }
-        } catch (error: any) {
-          console.log('[AUTH DEBUG] Session validation failed:', error?.message || error);
-          sessionValid = false;
-        }
+        // SECURITY: Never return user data based solely on shop parameter
+        // Always require a valid session token for authenticated requests
+        const shop = req.query.shop as string;
+        const host = req.query.host as string;
+        const loginUrl = shop 
+          ? `/api/login?shop=${encodeURIComponent(shop)}${host ? `&host=${encodeURIComponent(host)}` : ''}`
+          : '/api/login';
         
-        // If session is valid, return user data
-        if (sessionValid) {
-          const session = res.locals.shopify?.session;
-          if (session && session.accessToken) {
-            console.log('[AUTH DEBUG] Valid session found, upserting user for shop:', session.shop);
-            
-            // Upsert user from Shopify session
-            const { upsertShopifyUser } = await import("./shopifyAuth");
-            await upsertShopifyUser(session);
-            
-            // Get user ID based on session
-            const userId = session.onlineAccessInfo?.associated_user?.id 
-              ? `shopify_${session.onlineAccessInfo.associated_user.id}`
-              : `shopify_shop_${session.shop.replace('.myshopify.com', '')}`;
-              
-            const user = await storage.getUser(userId);
-            if (user) {
-              console.log('[AUTH DEBUG] Returning authenticated user');
-              return res.json(user);
-            }
-          }
-        }
-        
-        // If session validation failed, check if store exists and is active
-        console.log('[AUTH DEBUG] Checking if store exists and is active for shop:', shop);
-        try {
-          const store = await storage.getStoreByDomain(shop);
-          if (store && store.isActive) {
-            console.log('[AUTH DEBUG] Found active store, returning success');
-            
-            // Get or create user for this store
-            const user = await storage.getUser(store.userId);
-            if (user) {
-              return res.json(user);
-            } else {
-              // Create a basic user for the store if none exists
-              const newUser = await storage.upsertUser({
-                id: store.userId,
-                email: `admin@${shop}`,
-                firstName: 'Store',
-                lastName: 'Admin',
-                profileImageUrl: null
-              });
-              return res.json(newUser);
-            }
-          }
-        } catch (error) {
-          console.log('[AUTH DEBUG] Error checking store:', error);
-        }
-        
-        // Neither session is valid nor store exists/active - return 401 with proper App Bridge response
-        const loginUrl = `/api/login?${new URLSearchParams({ 
-          shop, 
-          ...(host && { host }) 
-        }).toString()}`;
-        
-        console.log('[AUTH DEBUG] ==> No valid session or active store found');
-        console.log('[AUTH DEBUG] Shop:', shop, 'Host:', host);
-        console.log('[AUTH DEBUG] Embedded context:', isEmbeddedContext);
-        console.log('[AUTH DEBUG] Returning 401 with loginUrl:', loginUrl);
+        console.log('[AUTH] No valid session token, returning 401 with loginUrl:', loginUrl);
         
         return res.status(401).json({ 
-          message: isEmbeddedContext ? "Authentication required for embedded app" : "Authentication required",
+          message: "Authentication required",
           loginUrl,
           requiresReload: isEmbeddedContext,
-          isEmbedded: isEmbeddedContext,
-          debug: {
-            shop,
-            host,
-            referer,
-            isFromShopifyAdmin,
-            hasSession: !!res.locals.shopify?.session,
-            sessionShop: res.locals.shopify?.session?.shop
-          }
+          isEmbedded: isEmbeddedContext
         });
         
       } catch (error: any) {

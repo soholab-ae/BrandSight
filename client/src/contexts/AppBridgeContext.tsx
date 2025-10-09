@@ -1,34 +1,32 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 
-// Extend Window interface to include ShopifyAppBridge
+// Shopify App Bridge types
 declare global {
   interface Window {
-    ShopifyAppBridge?: {
-      createApp: (config: {
-        apiKey: string;
-        shop: string;
-        host?: string;
-        forceRedirect?: boolean;
-      }) => any;
-      ActionType: {
-        ERROR: string;
-      };
-      actions: {
-        Loading: {
-          start: () => any;
-          stop: () => any;
-        };
+    shopify?: {
+      environment?: {
+        embedded?: boolean;
+        mobile?: boolean;
+        pos?: boolean;
       };
     };
   }
 }
 
+// Import App Bridge from CDN (loaded in index.html)
+let AppBridge: any = null;
+if (typeof window !== 'undefined') {
+  AppBridge = (window as any).AppBridge;
+}
+
 interface AppBridgeContextType {
   isEmbedded: boolean;
-  appBridge: any;
+  app: any;
   shop: string | null;
   host: string | null;
-  authenticatedFetch: ((url: string, options?: RequestInit) => Promise<Response>) | null;
+  ready: boolean;
+  getSessionToken: () => Promise<string | null>;
+  authenticatedFetch: (url: string, options?: RequestInit) => Promise<Response>;
 }
 
 const AppBridgeContext = createContext<AppBridgeContextType | null>(null);
@@ -47,122 +45,167 @@ interface AppBridgeProviderProps {
 
 export function AppBridgeProvider({ children }: AppBridgeProviderProps) {
   const [isEmbedded, setIsEmbedded] = useState(false);
-  const [appBridge, setAppBridge] = useState<any>(null);
+  const [app, setApp] = useState<any>(null);
   const [shop, setShop] = useState<string | null>(null);
   const [host, setHost] = useState<string | null>(null);
-  const [authenticatedFetch, setAuthenticatedFetch] = useState<((url: string, options?: RequestInit) => Promise<Response>) | null>(null);
+  const [ready, setReady] = useState(false);
+
+  // Get session token from App Bridge
+  const getSessionToken = useCallback(async (): Promise<string | null> => {
+    if (!app) {
+      console.warn('[AppBridge] App instance not available for getting session token');
+      return null;
+    }
+
+    try {
+      // App Bridge 3.x method
+      if (typeof app.idToken === 'function') {
+        const token = await app.idToken();
+        console.log('[AppBridge] Got session token via idToken()');
+        return token;
+      }
+      
+      // App Bridge 2.x fallback
+      if (typeof app.getSessionToken === 'function') {
+        const token = await app.getSessionToken();
+        console.log('[AppBridge] Got session token via getSessionToken()');
+        return token;
+      }
+
+      console.warn('[AppBridge] No session token method available');
+      return null;
+    } catch (error) {
+      console.error('[AppBridge] Error getting session token:', error);
+      return null;
+    }
+  }, [app]);
+
+  // Authenticated fetch that includes session token
+  const authenticatedFetch = useCallback(async (url: string, options: RequestInit = {}): Promise<Response> => {
+    try {
+      const sessionToken = await getSessionToken();
+      
+      if (sessionToken) {
+        console.log('[AppBridge] Making authenticated request to:', url);
+        return fetch(url, {
+          ...options,
+          headers: {
+            ...options.headers,
+            'Authorization': `Bearer ${sessionToken}`,
+            'Content-Type': 'application/json',
+          },
+        });
+      } else {
+        console.warn('[AppBridge] No session token available, using regular fetch');
+        return fetch(url, options);
+      }
+    } catch (error) {
+      console.error('[AppBridge] Error in authenticated fetch:', error);
+      return fetch(url, options);
+    }
+  }, [getSessionToken]);
 
   useEffect(() => {
-    // Extract URL parameters
+    // Check if we're running in Shopify's environment
     const urlParams = new URLSearchParams(window.location.search);
     const shopParam = urlParams.get('shop');
     const hostParam = urlParams.get('host');
-    
-    // Enhanced embedded context detection
-    const embeddedDetection = 
-      // URL parameters indicate embedded context
-      shopParam || hostParam ||
-      // Check if running in iframe
-      window.location !== window.parent.location ||
-      // Check referrer for Shopify admin
-      document.referrer?.includes('admin.shopify.com') ||
-      // Check for explicit embedded parameter
-      urlParams.get('embedded') === '1';
+    const embeddedParam = urlParams.get('embedded');
 
-    console.log('[AppBridge] Context detection:', {
+    // Detect embedded context
+    const embeddedDetection = 
+      window.self !== window.top || // Running in iframe
+      embeddedParam === '1' ||
+      shopParam !== null ||
+      hostParam !== null ||
+      window.shopify?.environment?.embedded === true;
+
+    console.log('[AppBridge] Environment detection:', {
+      isIframe: window.self !== window.top,
       shopParam,
       hostParam,
-      isIframe: window.location !== window.parent.location,
-      referrer: document.referrer,
+      embeddedParam,
+      shopifyEnv: window.shopify?.environment,
       embeddedDetection
     });
 
-    setIsEmbedded(Boolean(embeddedDetection));
+    setIsEmbedded(embeddedDetection);
     setShop(shopParam);
     setHost(hostParam);
 
-    // Initialize App Bridge if we're in embedded context and have required parameters
-    if (embeddedDetection && shopParam && typeof window !== 'undefined' && window.ShopifyAppBridge) {
+    // Initialize App Bridge if we're embedded and have the library
+    if (embeddedDetection && AppBridge && shopParam) {
       try {
-        console.log('[AppBridge] Initializing App Bridge for shop:', shopParam);
+        const apiKey = import.meta.env.VITE_SHOPIFY_API_KEY;
         
-        const bridge = window.ShopifyAppBridge!.createApp({
-          apiKey: import.meta.env.VITE_SHOPIFY_API_KEY || 'your_api_key_here',
-          shop: shopParam.replace('.myshopify.com', ''),
-          host: hostParam || undefined,
-          forceRedirect: true
-        });
-
-        console.log('[AppBridge] App Bridge initialized successfully:', bridge);
-        setAppBridge(bridge);
-
-        // Set up App Bridge error handling
-        bridge.subscribe(window.ShopifyAppBridge!.ActionType.ERROR, (error: any) => {
-          console.error('[AppBridge] Error:', error);
-        });
-
-        // Initialize authenticated fetch
-        try {
-          const authenticatedFetchFn = bridge.authenticatedFetch || bridge.getState?.()?.authenticatedFetch;
-          if (authenticatedFetchFn) {
-            console.log('[AppBridge] Setting up authenticated fetch');
-            setAuthenticatedFetch(() => authenticatedFetchFn);
-          } else {
-            // Fallback: Create authenticated fetch manually using session token
-            const authFetch = async (url: string, options: RequestInit = {}) => {
-              try {
-                // Get session token from App Bridge
-                const sessionToken = await bridge.getSessionToken();
-                if (sessionToken) {
-                  console.log('[AppBridge] Using session token for authenticated request');
-                  return fetch(url, {
-                    ...options,
-                    headers: {
-                      ...options.headers,
-                      'Authorization': `Bearer ${sessionToken}`,
-                      'Content-Type': 'application/json',
-                    },
-                  });
-                } else {
-                  console.warn('[AppBridge] No session token available, falling back to regular fetch');
-                  return fetch(url, options);
-                }
-              } catch (error) {
-                console.error('[AppBridge] Error getting session token:', error);
-                return fetch(url, options);
-              }
-            };
-            setAuthenticatedFetch(() => authFetch);
-          }
-        } catch (error) {
-          console.error('[AppBridge] Failed to set up authenticated fetch:', error);
-          setAuthenticatedFetch(null);
+        if (!apiKey) {
+          console.error('[AppBridge] VITE_SHOPIFY_API_KEY not configured');
+          return;
         }
 
-        // Handle loading state
-        bridge.dispatch(window.ShopifyAppBridge!.actions.Loading.start());
+        console.log('[AppBridge] Initializing App Bridge with config:', {
+          apiKey,
+          shop: shopParam,
+          host: hostParam
+        });
+
+        // Create App Bridge instance
+        const config = {
+          apiKey,
+          host: hostParam || btoa(`${shopParam}/admin`),
+          forceRedirect: true
+        };
+
+        const appInstance = AppBridge.createApp(config);
         
-        // Stop loading after a short delay to allow content to render
-        setTimeout(() => {
-          bridge.dispatch(window.ShopifyAppBridge!.actions.Loading.stop());
-        }, 1000);
+        console.log('[AppBridge] App Bridge initialized successfully');
+        setApp(appInstance);
+        setReady(true);
+
+        // Test getting session token
+        (async () => {
+          try {
+            let token = null;
+            if (typeof appInstance.idToken === 'function') {
+              token = await appInstance.idToken();
+            } else if (typeof appInstance.getSessionToken === 'function') {
+              token = await appInstance.getSessionToken();
+            }
+            
+            if (token) {
+              console.log('[AppBridge] Session token obtained successfully');
+            } else {
+              console.warn('[AppBridge] No session token available');
+            }
+          } catch (error) {
+            console.error('[AppBridge] Error testing session token:', error);
+          }
+        })();
 
       } catch (error) {
         console.error('[AppBridge] Failed to initialize App Bridge:', error);
+        setReady(true); // Set ready anyway to not block the app
       }
-    } else if (embeddedDetection) {
-      console.log('[AppBridge] Embedded context detected but missing required parameters or App Bridge not loaded');
+    } else {
+      console.log('[AppBridge] Not initializing App Bridge:', {
+        embeddedDetection,
+        hasAppBridge: !!AppBridge,
+        shopParam
+      });
+      setReady(true);
     }
-
-    // For non-embedded context, ensure we're not stuck in loading
-    if (!embeddedDetection) {
-      console.log('[AppBridge] Non-embedded context detected');
-    }
-
   }, []);
 
   return (
-    <AppBridgeContext.Provider value={{ isEmbedded, appBridge, shop, host, authenticatedFetch }}>
+    <AppBridgeContext.Provider value={{ 
+      isEmbedded, 
+      app, 
+      shop, 
+      host, 
+      ready,
+      getSessionToken,
+      authenticatedFetch
+    }}>
       {children}
     </AppBridgeContext.Provider>
   );
