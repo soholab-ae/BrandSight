@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "shopify app dev",
-    "build": "remix vite:build",
-    "start": "remix-serve ./build/server/index.js",
+    "build": "vite build",
+    "start": "node ./build/server/index.js",
     "deploy": "shopify app deploy",
     "config:link": "shopify app config link",
     "config:push": "shopify app config push",
