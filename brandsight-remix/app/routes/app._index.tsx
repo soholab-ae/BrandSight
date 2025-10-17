@@ -177,57 +177,63 @@ export default function DashboardPage() {
                   </Button>
                 </Link>
 
-                <Button fullWidth textAlign="left" variant="plain" disabled>
-                  <InlineStack gap="200" blockAlign="center">
-                    <span>📈</span>
-                    <BlockStack gap="100">
-                      <Text variant="bodyMd" as="p" fontWeight="semibold">
-                        Sales Analytics
-                      </Text>
-                      <Text variant="bodySm" as="p" tone="subdued">
-                        Trending data and insights (Coming soon)
-                      </Text>
-                    </BlockStack>
-                  </InlineStack>
-                </Button>
+                <Link to="/app/products" style={{ textDecoration: "none" }}>
+                  <Button fullWidth textAlign="left" variant="plain">
+                    <InlineStack gap="200" blockAlign="center">
+                      <span>🏆</span>
+                      <BlockStack gap="100">
+                        <Text variant="bodyMd" as="p" fontWeight="semibold">
+                          Product Performance
+                        </Text>
+                        <Text variant="bodySm" as="p" tone="subdued">
+                          Top products by revenue and sales
+                        </Text>
+                      </BlockStack>
+                    </InlineStack>
+                  </Button>
+                </Link>
+
+                <Link to="/app/loyalty" style={{ textDecoration: "none" }}>
+                  <Button fullWidth textAlign="left" variant="plain">
+                    <InlineStack gap="200" blockAlign="center">
+                      <span>❤️</span>
+                      <BlockStack gap="100">
+                        <Text variant="bodyMd" as="p" fontWeight="semibold">
+                          Customer Loyalty
+                        </Text>
+                        <Text variant="bodySm" as="p" tone="subdued">
+                          Brand affinity and multi-brand customers
+                        </Text>
+                      </BlockStack>
+                    </InlineStack>
+                  </Button>
+                </Link>
+
+                <Link to="/app/alerts" style={{ textDecoration: "none" }}>
+                  <Button fullWidth textAlign="left" variant="plain">
+                    <InlineStack gap="200" blockAlign="center">
+                      <span>🔔</span>
+                      <BlockStack gap="100">
+                        <Text variant="bodyMd" as="p" fontWeight="semibold">
+                          Smart Alerts
+                        </Text>
+                        <Text variant="bodySm" as="p" tone="subdued">
+                          Performance notifications and rules
+                        </Text>
+                      </BlockStack>
+                    </InlineStack>
+                  </Button>
+                </Link>
 
                 <Button fullWidth textAlign="left" variant="plain" disabled>
                   <InlineStack gap="200" blockAlign="center">
-                    <span>🏆</span>
+                    <span>📤</span>
                     <BlockStack gap="100">
                       <Text variant="bodyMd" as="p" fontWeight="semibold">
-                        Product Performance
+                        Reports & Export
                       </Text>
                       <Text variant="bodySm" as="p" tone="subdued">
-                        Top products by brand (Coming soon)
-                      </Text>
-                    </BlockStack>
-                  </InlineStack>
-                </Button>
-
-                <Button fullWidth textAlign="left" variant="plain" disabled>
-                  <InlineStack gap="200" blockAlign="center">
-                    <span>❤️</span>
-                    <BlockStack gap="100">
-                      <Text variant="bodyMd" as="p" fontWeight="semibold">
-                        Customer Loyalty
-                      </Text>
-                      <Text variant="bodySm" as="p" tone="subdued">
-                        Brand affinity and repeat purchases (Coming soon)
-                      </Text>
-                    </BlockStack>
-                  </InlineStack>
-                </Button>
-
-                <Button fullWidth textAlign="left" variant="plain" disabled>
-                  <InlineStack gap="200" blockAlign="center">
-                    <span>🔔</span>
-                    <BlockStack gap="100">
-                      <Text variant="bodyMd" as="p" fontWeight="semibold">
-                        Smart Alerts
-                      </Text>
-                      <Text variant="bodySm" as="p" tone="subdued">
-                        Performance notifications (Coming soon)
+                        Download CSV/Excel reports (Coming soon)
                       </Text>
                     </BlockStack>
                   </InlineStack>
