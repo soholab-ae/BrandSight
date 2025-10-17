@@ -7,6 +7,395 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// This schema will be populated by running:
-// npx prisma db pull
-// to reverse-engineer the existing Neon database safely
+// Enums
+enum AlertType {
+  performance_drop
+  performance_spike
+  inventory_low
+  sales_trend
+
+  @@map("alert_type")
+}
+
+enum Severity {
+  low
+  medium
+  high
+
+  @@map("severity")
+}
+
+enum ThresholdType {
+  percentage
+  absolute
+
+  @@map("threshold_type")
+}
+
+// Express session storage (existing table - DO NOT MODIFY)
+model Session {
+  sid    String   @id
+  sess   Json
+  expire DateTime
+
+  @@index([expire], name: "IDX_session_expire")
+  @@map("sessions")
+}
+
+// Shopify OAuth session storage (new table for Remix app)
+model ShopifySession {
+  id          String    @id
+  shop        String
+  state       String
+  isOnline    Boolean   @default(false) @map("is_online")
+  scope       String?
+  expires     DateTime?
+  accessToken String    @map("access_token")
+  userId      BigInt?   @map("user_id")
+
+  @@map("shopify_sessions")
+}
+
+// Users
+model User {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.VarChar
+  email           String?  @unique @db.VarChar
+  firstName       String?  @map("first_name") @db.VarChar
+  lastName        String?  @map("last_name") @db.VarChar
+  profileImageUrl String?  @map("profile_image_url") @db.VarChar
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @map("updated_at")
+
+  stores Store[]
+  alerts Alert[]
+
+  @@map("users")
+}
+
+// Shopify stores
+model Store {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.VarChar
+  userId             String    @map("user_id") @db.VarChar
+  name               String    @db.VarChar
+  domain             String    @db.VarChar
+  accessToken        String    @map("access_token") @db.VarChar
+  isActive           Boolean   @default(true) @map("is_active")
+  lastSyncAt         DateTime? @map("last_sync_at")
+  lastProductSyncAt  DateTime? @map("last_product_sync_at")
+  lastOrderSyncAt    DateTime? @map("last_order_sync_at")
+  productSyncCursor  String?   @map("product_sync_cursor") @db.VarChar
+  orderSyncCursor    String?   @map("order_sync_cursor") @db.VarChar
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  user                        User                          @relation(fields: [userId], references: [id])
+  vendors                     Vendor[]
+  products                    Product[]
+  orders                      Order[]
+  subscriptions               Subscription[]
+  vendorAnalytics             VendorAnalytics[]
+  pageAnalytics               PageAnalytics[]
+  alerts                      Alert[]
+  alertRules                  AlertRule[]
+  customerBrandAffinity       CustomerBrandAffinity[]
+  customerCrossBrandPurchases CustomerCrossBrandPurchases[]
+  inventory                   Inventory[]
+
+  @@map("stores")
+}
+
+// Vendors/Brands
+model Vendor {
+  id                      String    @id @default(dbgenerated("gen_random_uuid()")) @db.VarChar
+  storeId                 String    @map("store_id") @db.VarChar
+  name                    String    @db.VarChar
+  slug                    String    @db.VarChar
+  defaultMarginPercentage Decimal?  @map("default_margin_percentage") @db.Decimal(5, 2)
+  leadTimeDays            Int?      @default(14) @map("lead_time_days")
+  createdAt               DateTime  @default(now()) @map("created_at")
+
+  store                       Store                         @relation(fields: [storeId], references: [id])
+  products                    Product[]
+  orderLineItems              OrderLineItem[]
+  vendorAnalytics             VendorAnalytics[]
+  pageAnalytics               PageAnalytics[]
+  alerts                      Alert[]
+  alertRules                  AlertRule[]
+  customerBrandAffinity       CustomerBrandAffinity[]
+  crossBrandPurchasesPrimary  CustomerCrossBrandPurchases[] @relation("PrimaryVendor")
+  crossBrandPurchasesSecondary CustomerCrossBrandPurchases[] @relation("SecondaryVendor")
+  inventory                   Inventory[]
+
+  @@index([storeId], name: "IDX_vendors_store_id")
+  @@map("vendors")
+}
+
+// Products
+model Product {
+  id             String    @id @db.VarChar
+  storeId        String    @map("store_id") @db.VarChar
+  vendorId       String?   @map("vendor_id") @db.VarChar
+  title          String    @db.VarChar
+  handle         String    @db.VarChar
+  vendor         String?   @db.VarChar
+  productType    String?   @map("product_type") @db.VarChar
+  price          Decimal?  @db.Decimal(10, 2)
+  compareAtPrice Decimal?  @map("compare_at_price") @db.Decimal(10, 2)
+  cost           Decimal?  @db.Decimal(10, 2)
+  marginPercentage Decimal? @map("margin_percentage") @db.Decimal(5, 2)
+  status         String?   @db.VarChar
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @default(now()) @map("updated_at")
+
+  store          Store           @relation(fields: [storeId], references: [id])
+  vendorRel      Vendor?         @relation(fields: [vendorId], references: [id])
+  orderLineItems OrderLineItem[]
+  inventory      Inventory?
+
+  @@index([storeId], name: "IDX_products_store_id")
+  @@index([vendorId], name: "IDX_products_vendor_id")
+  @@map("products")
+}
+
+// Inventory tracking
+model Inventory {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.VarChar
+  productId         String    @map("product_id") @db.VarChar
+  storeId           String    @map("store_id") @db.VarChar
+  vendorId          String?   @map("vendor_id") @db.VarChar
+  quantity          Int       @default(0)
+  availableQuantity Int       @default(0) @map("available_quantity")
+  reservedQuantity  Int       @default(0) @map("reserved_quantity")
+  lastUpdated       DateTime  @default(now()) @map("last_updated")
+  syncedAt          DateTime? @map("synced_at")
+
+  product Product @relation(fields: [productId], references: [id])
+  store   Store   @relation(fields: [storeId], references: [id])
+  vendor  Vendor? @relation(fields: [vendorId], references: [id])
+
+  @@unique([productId], name: "UQ_inventory_product")
+  @@index([productId], name: "IDX_inventory_product_id")
+  @@index([storeId], name: "IDX_inventory_store_id")
+  @@index([vendorId], name: "IDX_inventory_vendor_id")
+  @@map("inventory")
+}
+
+// Orders
+model Order {
+  id                String    @id @db.VarChar
+  storeId           String    @map("store_id") @db.VarChar
+  orderNumber       String?   @map("order_number") @db.VarChar
+  totalPrice        Decimal?  @map("total_price") @db.Decimal(10, 2)
+  subtotalPrice     Decimal?  @map("subtotal_price") @db.Decimal(10, 2)
+  totalTax          Decimal?  @map("total_tax") @db.Decimal(10, 2)
+  currency          String?   @db.VarChar
+  financialStatus   String?   @map("financial_status") @db.VarChar
+  fulfillmentStatus String?   @map("fulfillment_status") @db.VarChar
+  customerEmail     String?   @map("customer_email") @db.VarChar
+  customerId        String?   @map("customer_id") @db.VarChar
+  landingPage       String?   @map("landing_page") @db.VarChar
+  referringSite     String?   @map("referring_site") @db.VarChar
+  processedAt       DateTime? @map("processed_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  store      Store           @relation(fields: [storeId], references: [id])
+  lineItems  OrderLineItem[]
+
+  @@index([storeId], name: "IDX_orders_store_id")
+  @@index([storeId, processedAt], name: "IDX_orders_store_id_processed_at")
+  @@index([financialStatus], name: "IDX_orders_financial_status")
+  @@map("orders")
+}
+
+// Order line items
+model OrderLineItem {
+  id            String   @id @db.VarChar
+  orderId       String   @map("order_id") @db.VarChar
+  productId     String?  @map("product_id") @db.VarChar
+  vendorId      String?  @map("vendor_id") @db.VarChar
+  title         String?  @db.VarChar
+  vendor        String?  @db.VarChar
+  quantity      Int?
+  price         Decimal? @db.Decimal(10, 2)
+  totalDiscount Decimal? @map("total_discount") @db.Decimal(10, 2)
+
+  order   Order    @relation(fields: [orderId], references: [id])
+  product Product? @relation(fields: [productId], references: [id])
+  vendorRel Vendor? @relation(fields: [vendorId], references: [id])
+
+  @@index([orderId], name: "IDX_order_line_items_order_id")
+  @@index([vendorId], name: "IDX_order_line_items_vendor_id")
+  @@index([productId], name: "IDX_order_line_items_product_id")
+  @@map("order_line_items")
+}
+
+// Subscriptions
+model Subscription {
+  id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.VarChar
+  storeId                String    @map("store_id") @db.VarChar
+  shopifySubscriptionId  String?   @map("shopify_subscription_id") @db.VarChar
+  planName               String    @map("plan_name") @db.VarChar
+  status                 String    @db.VarChar
+  amount                 Decimal   @db.Decimal(10, 2)
+  currency               String    @default("USD") @db.VarChar
+  trialEndsAt            DateTime? @map("trial_ends_at")
+  currentPeriodStart     DateTime? @map("current_period_start")
+  currentPeriodEnd       DateTime? @map("current_period_end")
+  cancelledAt            DateTime? @map("cancelled_at")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @default(now()) @map("updated_at")
+
+  store Store @relation(fields: [storeId], references: [id])
+
+  @@index([storeId], name: "IDX_subscriptions_store_id")
+  @@index([status], name: "IDX_subscriptions_status")
+  @@index([shopifySubscriptionId], name: "IDX_subscriptions_shopify_id")
+  @@map("subscriptions")
+}
+
+// Analytics - Vendor aggregated data
+model VendorAnalytics {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.VarChar
+  storeId        String   @map("store_id") @db.VarChar
+  vendorId       String?  @map("vendor_id") @db.VarChar
+  date           DateTime
+  revenue        Decimal  @default(0) @db.Decimal(10, 2)
+  orders         Int      @default(0)
+  visitors       Int      @default(0)
+  conversions    Int      @default(0)
+  aov            Decimal  @default(0) @db.Decimal(10, 2)
+  conversionRate Decimal  @default(0) @map("conversion_rate") @db.Decimal(5, 4)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  store  Store   @relation(fields: [storeId], references: [id])
+  vendor Vendor? @relation(fields: [vendorId], references: [id])
+
+  @@index([storeId], name: "IDX_vendor_analytics_store_id")
+  @@index([storeId, vendorId, date], name: "IDX_vendor_analytics_store_vendor_date")
+  @@index([date], name: "IDX_vendor_analytics_date")
+  @@map("vendor_analytics")
+}
+
+// Page analytics
+model PageAnalytics {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.VarChar
+  storeId    String   @map("store_id") @db.VarChar
+  vendorId   String?  @map("vendor_id") @db.VarChar
+  path       String   @db.VarChar
+  pageType   String?  @map("page_type") @db.VarChar
+  visitors   Int      @default(0)
+  bounceRate Decimal? @map("bounce_rate") @db.Decimal(5, 4)
+  date       DateTime
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  store  Store   @relation(fields: [storeId], references: [id])
+  vendor Vendor? @relation(fields: [vendorId], references: [id])
+
+  @@index([storeId], name: "IDX_page_analytics_store_id")
+  @@index([storeId, vendorId, date], name: "IDX_page_analytics_store_vendor_date")
+  @@index([path], name: "IDX_page_analytics_path")
+  @@map("page_analytics")
+}
+
+// ============= SMART ALERTS SYSTEM =============
+
+// Alerts
+model Alert {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.VarChar
+  userId         String    @map("user_id") @db.VarChar
+  storeId        String    @map("store_id") @db.VarChar
+  alertType      AlertType @map("alert_type")
+  message        String    @db.Text
+  thresholdValue Decimal?  @map("threshold_value") @db.Decimal(10, 2)
+  currentValue   Decimal?  @map("current_value") @db.Decimal(10, 2)
+  severity       Severity
+  vendorId       String?   @map("vendor_id") @db.VarChar
+  createdAt      DateTime  @default(now()) @map("created_at")
+  acknowledgedAt DateTime? @map("acknowledged_at")
+  isRead         Boolean   @default(false) @map("is_read")
+  timeBucket     String    @default(dbgenerated("to_char(now(), 'YYYY-MM-DD-HH24')")) @map("time_bucket") @db.VarChar
+
+  user   User    @relation(fields: [userId], references: [id])
+  store  Store   @relation(fields: [storeId], references: [id])
+  vendor Vendor? @relation(fields: [vendorId], references: [id])
+
+  @@unique([storeId, vendorId, alertType, timeBucket], name: "alerts_duplicate_prevention")
+  @@index([storeId], name: "IDX_alerts_store_id")
+  @@index([vendorId], name: "IDX_alerts_vendor_id")
+  @@index([createdAt], name: "IDX_alerts_created_at")
+  @@index([severity], name: "IDX_alerts_severity")
+  @@index([isRead], name: "IDX_alerts_is_read")
+  @@index([timeBucket], name: "IDX_alerts_time_bucket")
+  @@map("alerts")
+}
+
+// Alert rules
+model AlertRule {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.VarChar
+  storeId        String        @map("store_id") @db.VarChar
+  alertType      AlertType     @map("alert_type")
+  vendorId       String?       @map("vendor_id") @db.VarChar
+  thresholdType  ThresholdType @map("threshold_type")
+  thresholdValue Decimal       @map("threshold_value") @db.Decimal(10, 2)
+  enabled        Boolean       @default(true)
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  store  Store   @relation(fields: [storeId], references: [id])
+  vendor Vendor? @relation(fields: [vendorId], references: [id])
+
+  @@index([storeId], name: "IDX_alert_rules_store_id")
+  @@index([vendorId], name: "IDX_alert_rules_vendor_id")
+  @@index([createdAt], name: "IDX_alert_rules_created_at")
+  @@index([enabled], name: "IDX_alert_rules_enabled")
+  @@map("alert_rules")
+}
+
+// ============= CUSTOMER BRAND LOYALTY =============
+
+// Customer brand affinity
+model CustomerBrandAffinity {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.VarChar
+  storeId       String   @map("store_id") @db.VarChar
+  customerId    String   @map("customer_id") @db.Text
+  vendorId      String   @map("vendor_id") @db.VarChar
+  affinityScore Decimal  @map("affinity_score") @db.Decimal(5, 2)
+  totalOrders   Int      @default(0) @map("total_orders")
+  totalSpent    Decimal  @default(0) @map("total_spent") @db.Decimal(10, 2)
+  firstPurchase DateTime? @map("first_purchase")
+  lastPurchase  DateTime? @map("last_purchase")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @default(now()) @map("updated_at")
+
+  store  Store  @relation(fields: [storeId], references: [id])
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+
+  @@unique([storeId, customerId, vendorId], name: "customer_brand_affinity_unique_composite")
+  @@index([storeId], name: "IDX_customer_brand_affinity_store_id")
+  @@index([vendorId], name: "IDX_customer_brand_affinity_vendor_id")
+  @@index([customerId], name: "IDX_customer_brand_affinity_customer_id")
+  @@index([createdAt], name: "IDX_customer_brand_affinity_created_at")
+  @@map("customer_brand_affinity")
+}
+
+// Customer cross-brand purchases
+model CustomerCrossBrandPurchases {
+  id                 String  @id @default(dbgenerated("gen_random_uuid()")) @db.VarChar
+  storeId            String  @map("store_id") @db.VarChar
+  customerId         String  @map("customer_id") @db.Text
+  primaryVendorId    String  @map("primary_vendor_id") @db.VarChar
+  secondaryVendorId  String  @map("secondary_vendor_id") @db.VarChar
+  crossPurchaseCount Int     @default(0) @map("cross_purchase_count")
+  totalCrossValue    Decimal @default(0) @map("total_cross_value") @db.Decimal(10, 2)
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  store           Store  @relation(fields: [storeId], references: [id])
+  primaryVendor   Vendor @relation("PrimaryVendor", fields: [primaryVendorId], references: [id])
+  secondaryVendor Vendor @relation("SecondaryVendor", fields: [secondaryVendorId], references: [id])
+
+  @@index([storeId], name: "IDX_customer_cross_brand_store_id")
+  @@index([customerId], name: "IDX_customer_cross_brand_customer_id")
+  @@index([primaryVendorId], name: "IDX_customer_cross_brand_primary_vendor")
+  @@index([secondaryVendorId], name: "IDX_customer_cross_brand_secondary_vendor")
+  @@index([createdAt], name: "IDX_customer_cross_brand_created_at")
+  @@index([storeId, primaryVendorId, secondaryVendorId], name: "IDX_customer_cross_brand_analysis")
+  @@map("customer_cross_brand_purchases")
+}
