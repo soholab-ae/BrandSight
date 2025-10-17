@@ -1,0 +1,55 @@
+2025-10-17T22:13:54.878142814Z ==> Cloning from https://github.com/soholab-ae/BrandSight
+2025-10-17T22:13:57.318291065Z ==> Checking out commit 23753ed927bdc8b2da80b3742a3f01fec9107f53 in branch replit-agent
+2025-10-17T22:13:59.108426092Z ==> Requesting Node.js version >=20.0.0
+2025-10-17T22:13:59.530173728Z ==> Using Node.js version 25.0.0 via /opt/render/project/src/brandsight-remix/package.json
+2025-10-17T22:13:59.576931631Z ==> Docs on specifying a Node.js version: https://render.com/docs/node-version
+2025-10-17T22:14:02.318887669Z ==> Running build command 'npm install && npm run build'...
+2025-10-17T22:15:29.428758192Z 
+2025-10-17T22:15:29.428805983Z added 249 packages, and audited 250 packages in 1m
+2025-10-17T22:15:29.428844364Z 
+2025-10-17T22:15:29.429037317Z 39 packages are looking for funding
+2025-10-17T22:15:29.429077078Z   run `npm fund` for details
+2025-10-17T22:15:29.430942333Z 
+2025-10-17T22:15:29.430960463Z found 0 vulnerabilities
+2025-10-17T22:15:29.817274471Z 
+2025-10-17T22:15:29.817305821Z > brandsight-remix@1.0.0 build
+2025-10-17T22:15:29.817311682Z > vite build
+2025-10-17T22:15:29.817316702Z 
+2025-10-17T22:15:30.064260035Z /opt/render/project/src/brandsight-remix/node_modules/rollup/dist/native.js:83
+2025-10-17T22:15:30.064287295Z 		throw new Error(
+2025-10-17T22:15:30.064292625Z 		      ^
+2025-10-17T22:15:30.064297486Z 
+2025-10-17T22:15:30.064303916Z Error: Cannot find module @rollup/rollup-linux-x64-gnu. npm has a bug related to optional dependencies (https://github.com/npm/cli/issues/4828). Please try `npm i` again after removing both package-lock.json and node_modules directory.
+2025-10-17T22:15:30.064309836Z     at requireWithFriendlyError (/opt/render/project/src/brandsight-remix/node_modules/rollup/dist/native.js:83:9)
+2025-10-17T22:15:30.064315496Z     at Object.<anonymous> (/opt/render/project/src/brandsight-remix/node_modules/rollup/dist/native.js:92:76)
+2025-10-17T22:15:30.064321236Z     at Module._compile (node:internal/modules/cjs/loader:1759:14)
+2025-10-17T22:15:30.064326646Z     at Object..js (node:internal/modules/cjs/loader:1892:10)
+2025-10-17T22:15:30.064331606Z     at Module.load (node:internal/modules/cjs/loader:1479:32)
+2025-10-17T22:15:30.064336476Z     at Module._load (node:internal/modules/cjs/loader:1298:12)
+2025-10-17T22:15:30.064341226Z     at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+2025-10-17T22:15:30.064346336Z     at wrapModuleLoad (node:internal/modules/cjs/loader:244:24)
+2025-10-17T22:15:30.064353927Z     at cjsLoader (node:internal/modules/esm/translators:342:5)
+2025-10-17T22:15:30.064358887Z     at ModuleWrap.<anonymous> (node:internal/modules/esm/translators:234:7) {
+2025-10-17T22:15:30.064363607Z   [cause]: Error: Cannot find module '@rollup/rollup-linux-x64-gnu'
+2025-10-17T22:15:30.064368287Z   Require stack:
+2025-10-17T22:15:30.064373107Z   - /opt/render/project/src/brandsight-remix/node_modules/rollup/dist/native.js
+2025-10-17T22:15:30.064378057Z       at Module._resolveFilename (node:internal/modules/cjs/loader:1419:15)
+2025-10-17T22:15:30.064383257Z       at defaultResolveImpl (node:internal/modules/cjs/loader:1057:19)
+2025-10-17T22:15:30.064388137Z       at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1062:22)
+2025-10-17T22:15:30.064410188Z       at Module._load (node:internal/modules/cjs/loader:1225:37)
+2025-10-17T22:15:30.064413408Z       at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+2025-10-17T22:15:30.064416378Z       at wrapModuleLoad (node:internal/modules/cjs/loader:244:24)
+2025-10-17T22:15:30.064419348Z       at Module.require (node:internal/modules/cjs/loader:1502:12)
+2025-10-17T22:15:30.064422288Z       at require (node:internal/modules/helpers:152:16)
+2025-10-17T22:15:30.064425218Z       at requireWithFriendlyError (/opt/render/project/src/brandsight-remix/node_modules/rollup/dist/native.js:65:10)
+2025-10-17T22:15:30.064428378Z       at Object.<anonymous> (/opt/render/project/src/brandsight-remix/node_modules/rollup/dist/native.js:92:76) {
+2025-10-17T22:15:30.064432678Z     code: 'MODULE_NOT_FOUND',
+2025-10-17T22:15:30.064436328Z     requireStack: [
+2025-10-17T22:15:30.064440378Z       '/opt/render/project/src/brandsight-remix/node_modules/rollup/dist/native.js'
+2025-10-17T22:15:30.064444408Z     ]
+2025-10-17T22:15:30.064448138Z   }
+2025-10-17T22:15:30.064451788Z }
+2025-10-17T22:15:30.064454998Z 
+2025-10-17T22:15:30.064458469Z Node.js v25.0.0
+2025-10-17T22:15:30.109055095Z ==> Build failed 😞
+2025-10-17T22:15:30.109112136Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
