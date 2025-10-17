@@ -1,0 +1,32 @@
+2025-10-17T22:18:15.017385254Z ==> Cloning from https://github.com/soholab-ae/BrandSight
+2025-10-17T22:18:26.990883338Z ==> Requesting Node.js version >=20.0.0
+2025-10-17T22:18:27.549888941Z ==> Using Node.js version 25.0.0 via /opt/render/project/src/brandsight-remix/package.json
+2025-10-17T22:18:27.59797237Z ==> Docs on specifying a Node.js version: https://render.com/docs/node-version
+2025-10-17T22:18:30.444630521Z ==> Running build command 'npm ci && npx prisma generate && npm run build'...
+2025-10-17T22:18:31.103881116Z npm error code EUSAGE
+2025-10-17T22:18:31.10969186Z npm error
+2025-10-17T22:18:31.109706791Z npm error The `npm ci` command can only install with an existing package-lock.json or
+2025-10-17T22:18:31.109710401Z npm error npm-shrinkwrap.json with lockfileVersion >= 1. Run an install with npm@5 or
+2025-10-17T22:18:31.109714241Z npm error later to generate a package-lock.json file, then try again.
+2025-10-17T22:18:31.109717821Z npm error
+2025-10-17T22:18:31.109721421Z npm error Clean install a project
+2025-10-17T22:18:31.109728151Z npm error
+2025-10-17T22:18:31.109731651Z npm error Usage:
+2025-10-17T22:18:31.109734661Z npm error npm ci
+2025-10-17T22:18:31.109737691Z npm error
+2025-10-17T22:18:31.109741141Z npm error Options:
+2025-10-17T22:18:31.109744121Z npm error [--install-strategy <hoisted|nested|shallow|linked>] [--legacy-bundling]
+2025-10-17T22:18:31.109747062Z npm error [--global-style] [--omit <dev|optional|peer> [--omit <dev|optional|peer> ...]]
+2025-10-17T22:18:31.109750162Z npm error [--include <prod|dev|optional|peer> [--include <prod|dev|optional|peer> ...]]
+2025-10-17T22:18:31.109753112Z npm error [--strict-peer-deps] [--foreground-scripts] [--ignore-scripts] [--no-audit]
+2025-10-17T22:18:31.109756572Z npm error [--no-bin-links] [--no-fund] [--dry-run]
+2025-10-17T22:18:31.109759482Z npm error [-w|--workspace <workspace-name> [-w|--workspace <workspace-name> ...]]
+2025-10-17T22:18:31.109762552Z npm error [--workspaces] [--include-workspace-root] [--install-links]
+2025-10-17T22:18:31.109765512Z npm error
+2025-10-17T22:18:31.109768552Z npm error aliases: clean-install, ic, install-clean, isntall-clean
+2025-10-17T22:18:31.109771782Z npm error
+2025-10-17T22:18:31.109774722Z npm error Run "npm help ci" for more info
+2025-10-17T22:18:31.112631558Z npm error A complete log of this run can be found in: /opt/render/.cache/_logs/2025-10-17T22_18_30_578Z-debug-0.log
+2025-10-17T22:18:31.211779346Z ==> Build failed 😞
+2025-10-17T22:18:31.211807147Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
+2025-10-17T22:18:25.603071346Z ==> Checking out commit 23753ed927bdc8b2da80b3742a3f01fec9107f53 in branch replit-agent
