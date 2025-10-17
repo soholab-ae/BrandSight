@@ -2,16 +2,20 @@
 
 BrandSight is a comprehensive Shopify analytics application that provides deep brand-specific insights that standard Shopify analytics don't offer. The app allows store owners to analyze performance metrics by brand and vendor, including Average Order Value (AOV), conversion rates, visitor metrics, and revenue analytics across different product brands. Users can connect their Shopify stores to sync product and order data, then view detailed dashboards with brand comparisons, top products, landing page analytics, and customizable date ranges.
 
-## Recent Updates
-- **Session Storage Fixed**: Replaced MemorySessionStorage with PostgreSQL-based persistent session storage to fix authentication issues
-- **Custom Session Storage**: Implemented PostgreSQLSessionStorage class that uses existing database for session persistence
-- **Setup Page Eliminated**: Removed manual setup flow - users now authenticate via Shopify OAuth and go directly to dashboard
-- **Streamlined OAuth Flow**: Install app → Authenticate → Dashboard (no intermediate setup steps)
-- **Demo Mode Implemented**: Instant access to dashboard without requiring Shopify store connection
-- **Sample Data Available**: Realistic demo data featuring 5 athletic brands (Nike, Adidas, Under Armour, Puma, New Balance) with 250+ orders
-- **Database Persistence Fixed**: OAuth callback now properly creates user and store entries in database
-- **Enhanced Logging**: Comprehensive logging added throughout OAuth flow for debugging
-- **Logo Updated**: New gradient BrandSight logo with better visibility in header (replaced white text version)
+## Recent Updates (October 17, 2025)
+- **MAJOR: Remix + Polaris Rebuild Started**: Initialized new production-ready Shopify app in `brandsight-remix/` directory
+- **Official Stack**: Using Shopify's recommended Remix + Polaris framework (replacing React + Tailwind)
+- **Simplified Scope**: Removed AI features (forecasting, inventory intelligence) to focus on core brand analytics
+- **Safe Migration Strategy**: New app runs in parallel with current app, using existing Neon PostgreSQL database
+- **Production-Ready Auth**: Built-in Shopify OAuth with session tokens and App Bridge integration
+- **Polaris Components**: Dashboard and routes configured with Shopify's official design system
+- **Deployment Ready**: Configured for Render deployment with staging and production environments
+
+## Legacy App Status (Original React + Tailwind)
+- Session Storage Fixed: PostgreSQL-based persistent session storage
+- Setup Page Eliminated: Direct OAuth flow to dashboard
+- Demo Mode Implemented: Sample data with 5 athletic brands, 250+ orders
+- Known Issues: Authentication vulnerabilities, not using official Shopify stack
 
 # User Preferences
 
@@ -19,8 +23,31 @@ Preferred communication style: Simple, everyday language.
 
 # System Architecture
 
-## Full-Stack Architecture
-The application uses a modern full-stack architecture with a React frontend and Express backend. The frontend is built with Vite for fast development and optimized builds, while the backend serves both API routes and static assets. The architecture follows a monorepo structure with shared TypeScript types between frontend and backend.
+## New Remix + Polaris Architecture (brandsight-remix/)
+The application is being rebuilt using Shopify's official recommended stack:
+
+- **Framework**: Remix 2.14 - Full-stack React framework with server-side rendering
+- **UI Library**: Shopify Polaris 13.9 - Official Shopify design system
+- **Authentication**: `@shopify/shopify-app-remix` - Built-in OAuth and session token management
+- **Database**: Prisma 5.20 with Neon PostgreSQL - Type-safe ORM
+- **App Bridge**: Shopify App Bridge 3.x - Embedded app integration
+- **Routing**: File-based routing with Remix loaders and actions
+- **Data Fetching**: Server-side loaders with automatic client hydration
+- **Deployment**: Render (production) with Neon serverless PostgreSQL
+
+### Key Benefits
+- ✅ Official Shopify support and maintained templates
+- ✅ Production-ready authentication with session tokens
+- ✅ Polaris components match Shopify Admin perfectly
+- ✅ Better security (no custom auth vulnerabilities)
+- ✅ Server-side rendering for faster initial loads
+- ✅ Type-safe database operations with Prisma
+- ✅ Future-proof architecture aligned with Shopify roadmap
+
+## Legacy Architecture (Current React + Express App)
+The original application uses a modern full-stack architecture with a React frontend and Express backend. The frontend is built with Vite for fast development and optimized builds, while the backend serves both API routes and static assets. The architecture follows a monorepo structure with shared TypeScript types between frontend and backend.
+
+**Note**: This legacy app remains functional for reference but has known authentication security issues and does not use Shopify's official stack.
 
 ## Frontend Architecture
 - **React with TypeScript**: Component-based architecture using React 18 with TypeScript for type safety
