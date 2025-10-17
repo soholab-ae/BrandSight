@@ -5,13 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "shopify app dev",
-    "build": "shopify app build",
+    "build": "remix vite:build",
+    "start": "remix-serve ./build/server/index.js",
     "deploy": "shopify app deploy",
     "config:link": "shopify app config link",
     "config:push": "shopify app config push",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:push": "prisma db push"
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",
@@ -30,7 +31,6 @@
   },
   "devDependencies": {
     "@remix-run/dev": "^2.14.0",
-    "@shopify/app": "^3.69.0",
     "@types/node": "^22.10.2",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
