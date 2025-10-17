@@ -69,7 +69,7 @@ You'll do this after deploying to Render (we'll cover it in Part 4).
 - **Branch**: `main`
 - **Root Directory**: `brandsight-remix` (important!)
 - **Runtime**: `Node`
-- **Build Command**: `npm install && npm run build`
+- **Build Command**: `npm install && npx prisma generate && npm run build`
 - **Start Command**: `npm run start`
 - **Instance Type**: `Starter` ($7/month) or `Standard` for production
 
